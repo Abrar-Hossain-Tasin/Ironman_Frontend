@@ -1424,12 +1424,16 @@ export default function HomePage() {
               >
                 <div className="absolute inset-0 overflow-hidden">
                   <div className="h-full w-full"
+                    // style={{
+                    //   background: 'linear-gradient(90deg, transparent 0%, #D81B2A 30%, #D81B2A 70%, transparent 100%)',
+                    //   animation: 'line-grow 2s ease-out forwards',
+                    //   backgroundSize: '200% 100%',
+                    //   animation: 'border-shimmer 3s linear infinite'
+                    // }}
                     style={{
-                      background: 'linear-gradient(90deg, transparent 0%, #D81B2A 30%, #D81B2A 70%, transparent 100%)',
-                      animation: 'line-grow 2s ease-out forwards',
-                      backgroundSize: '200% 100%',
-                      animation: 'border-shimmer 3s linear infinite'
-                    }}
+  animation: 'line-grow 2s ease-out forwards, border-shimmer 3s linear infinite',
+  backgroundSize: '200% 100%',
+}}
                   />
                 </div>
               </div>
