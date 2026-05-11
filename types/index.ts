@@ -78,14 +78,15 @@ export type ClothingType = {
 }
 
 export type PricingCell = {
-  id: string
-  serviceCategoryId: string
-  serviceCategoryName: string
-  clothingTypeId: string
-  clothingTypeName: string
-  price: number
-  effectiveFrom?: string
-  currency: 'BDT' | string
+  id: string; // The UUID from PricingResponse
+  serviceCategoryId: string;
+  serviceCategoryName: string;
+  clothingTypeId: string;
+  clothingTypeName: string;
+  price: number;
+  currency: string;
+  effectiveFrom: string; // LocalDate translates to string in JSON
+  current?: boolean; // Optional, useful for filtering
 }
 
 export type TrackingEvent = {
