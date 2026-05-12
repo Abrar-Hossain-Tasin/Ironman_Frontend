@@ -11,14 +11,27 @@ export function AdminPayments() {
   const token = useAuthStore((state) => state.accessToken)
   const [payments, setPayments] = useState<PaymentLedgerRow[]>([])
 
-  useEffect(() => {
+  async function load() {
     if (!token) return
-    apiFetch<PaymentLedgerRow[]>('/payments', { token }).then(setPayments)
+    setPayments(await apiFetch<PaymentLedgerRow[]>('/payments', { token }))
+  }
+
+  useEffect(() => {
+    void load()
   }, [token])
+
+  async function verify(payment: PaymentLedgerRow) {
+    if (!token) return
+    await apiFetch<PaymentLedgerRow>(`/payments/${payment.id}/verify`, {
+      method: 'PUT',
+      token
+    })
+    await load()
+  }
 
   return (
     <RequireAuth roles={['admin']}>
-      <PaymentLedger payments={payments} />
+      <PaymentLedger payments={payments} onVerify={verify} />
     </RequireAuth>
   )
 }

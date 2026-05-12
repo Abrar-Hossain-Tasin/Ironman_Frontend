@@ -27,7 +27,8 @@ export type OrderStatus =
 export type AssignmentStatus = 'pending' | 'accepted' | 'in_progress' | 'completed' | 'rejected'
 export type AssignmentType = 'pickup' | 'delivery' | 'wash' | 'iron' | 'dry_clean'
 export type PaymentStatus = 'pending' | 'paid' | 'partial'
-export type PaymentType = 'cod_pickup' | 'cod_delivery' | 'advance' | 'partial'
+export type PaymentType = 'cod_pickup' | 'cod_delivery' | 'bkash_merchant' | 'advance' | 'partial'
+export type PaymentMethod = 'cod' | 'online'
 
 export type UserSummary = {
   id: string
@@ -102,6 +103,17 @@ export type TrackingEvent = {
   timestamp: string
 }
 
+export type DeliveryLocation = {
+  deliveryManId: string
+  deliveryManName: string
+  latitude: number
+  longitude: number
+  accuracy?: number | null
+  orderId?: string | null
+  orderNumber?: string | null
+  updatedAt: string
+}
+
 export type OrderItemResponse = {
   id: string
   clothingTypeId: string
@@ -126,7 +138,7 @@ export type OrderResponse = {
   preferredDeliveryTimeSlot: string
   specialInstructions?: string | null
   status: OrderStatus
-  paymentMethod: 'cod' | 'online'
+  paymentMethod: PaymentMethod
   paymentStatus: PaymentStatus
   totalAmount: number
   paidAmount: number
@@ -172,6 +184,8 @@ export type PaymentLedgerRow = {
   amount: number
   paymentType: PaymentType
   collectedAt: string
+  paymentReference?: string | null
+  payerPhone?: string | null
   verified: boolean
   notes?: string | null
   verifiedBy?: string | null

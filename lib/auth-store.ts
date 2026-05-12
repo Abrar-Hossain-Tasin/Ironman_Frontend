@@ -8,8 +8,10 @@ type AuthState = {
   accessToken: string | null
   refreshToken: string | null
   user: UserSummary | null
+  hasHydrated: boolean
   setAuth: (auth: AuthResponse) => void
   clearAuth: () => void
+  setHasHydrated: (value: boolean) => void
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -18,16 +20,21 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       refreshToken: null,
       user: null,
+      hasHydrated: false,
       setAuth: (auth) =>
         set({
           accessToken: auth.accessToken,
           refreshToken: auth.refreshToken,
           user: auth.user
         }),
-      clearAuth: () => set({ accessToken: null, refreshToken: null, user: null })
+      clearAuth: () => set({ accessToken: null, refreshToken: null, user: null }),
+      setHasHydrated: (value) => set({ hasHydrated: value })
     }),
     {
-      name: 'ironman-auth'
+      name: 'ironman-auth',
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true)
+      }
     }
   )
 )

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { AdminLiveLocations } from '@/components/admin/admin-live-locations'
 import { RequireAuth } from '@/components/auth/require-auth'
 import { AssignmentCard } from '@/components/tasks/assignment-card'
 import { apiFetch } from '@/lib/api'
@@ -18,6 +19,7 @@ export function AdminAssignments() {
 
   return (
     <RequireAuth roles={['admin']}>
+      <AdminLiveLocations />
       <div className="grid gap-4 md:grid-cols-3">
         {assignments.map((assignment) => <AssignmentCard key={assignment.id} assignment={assignment} />)}
       </div>

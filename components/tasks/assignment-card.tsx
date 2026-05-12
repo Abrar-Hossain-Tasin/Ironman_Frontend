@@ -12,6 +12,10 @@ type AssignmentCardProps = {
 }
 
 export function AssignmentCard({ assignment, onAccept, onStart, onComplete }: AssignmentCardProps) {
+  const canAccept = assignment.status === 'pending'
+  const canStart = assignment.status === 'pending' || assignment.status === 'accepted'
+  const canComplete = assignment.status === 'accepted' || assignment.status === 'in_progress'
+
   return (
     <article className="rounded-lg border border-ironman-navy-100 bg-white p-5 shadow-soft">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -38,13 +42,13 @@ export function AssignmentCard({ assignment, onAccept, onStart, onComplete }: As
         </p>
       ) : null}
       <div className="mt-5 grid grid-cols-3 gap-2">
-        <button className="tap-target focus-ring rounded-lg border border-ironman-navy px-3 py-2 text-sm font-semibold text-ironman-navy disabled:opacity-60" type="button" onClick={() => onAccept?.(assignment)} disabled={!onAccept}>
+        <button className="tap-target focus-ring rounded-lg border border-ironman-navy px-3 py-2 text-sm font-semibold text-ironman-navy disabled:opacity-60" type="button" onClick={() => onAccept?.(assignment)} disabled={!onAccept || !canAccept}>
           Accept
         </button>
-        <button className="tap-target focus-ring rounded-lg bg-ironman-navy px-3 py-2 text-sm font-semibold text-white disabled:opacity-60" type="button" onClick={() => onStart?.(assignment)} disabled={!onStart}>
+        <button className="tap-target focus-ring rounded-lg bg-ironman-navy px-3 py-2 text-sm font-semibold text-white disabled:opacity-60" type="button" onClick={() => onStart?.(assignment)} disabled={!onStart || !canStart}>
           Start
         </button>
-        <button className="tap-target focus-ring rounded-lg bg-ironman-red px-3 py-2 text-sm font-semibold text-white disabled:opacity-60" type="button" onClick={() => onComplete?.(assignment)} disabled={!onComplete}>
+        <button className="tap-target focus-ring rounded-lg bg-ironman-red px-3 py-2 text-sm font-semibold text-white disabled:opacity-60" type="button" onClick={() => onComplete?.(assignment)} disabled={!onComplete || !canComplete}>
           Done
         </button>
       </div>

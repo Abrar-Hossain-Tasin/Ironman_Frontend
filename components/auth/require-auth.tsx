@@ -14,8 +14,10 @@ export function RequireAuth({ roles, children }: RequireAuthProps) {
   const router = useRouter()
   const accessToken = useAuthStore((state) => state.accessToken)
   const user = useAuthStore((state) => state.user)
+  const hasHydrated = useAuthStore((state) => state.hasHydrated)
 
   useEffect(() => {
+    if (!hasHydrated) return
     if (!accessToken) {
       router.replace('/login')
       return
@@ -23,7 +25,11 @@ export function RequireAuth({ roles, children }: RequireAuthProps) {
     if (roles && user && !roles.includes(user.role)) {
       router.replace('/')
     }
-  }, [accessToken, roles, router, user])
+  }, [accessToken, hasHydrated, roles, router, user])
+
+  if (!hasHydrated) {
+    return <p className="rounded-lg bg-white p-5 text-sm font-semibold text-ironman-navy shadow-soft">Loading...</p>
+  }
 
   if (!accessToken) {
     return <p className="rounded-lg bg-white p-5 text-sm font-semibold text-ironman-navy shadow-soft">Redirecting to login...</p>
