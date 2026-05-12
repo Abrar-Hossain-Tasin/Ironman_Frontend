@@ -11,6 +11,7 @@ const config: OpenNextConfig = {
       queue: "dummy",
     },
   },
+  edgeExternals: [], 
   middleware: {
     external: true,
     override: {
