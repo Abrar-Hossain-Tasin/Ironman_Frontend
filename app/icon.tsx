@@ -1,6 +1,7 @@
 import { ImageResponse } from 'next/og'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs';
+// export const runtime = 'edge'
 export const alt = 'IRONMAN Laundry'
 export const size = { width: 32, height: 32 }
 export const contentType = 'image/png'
