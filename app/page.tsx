@@ -851,8 +851,9 @@
 //   )
 // }
 
-export const runtime = 'edge';
+
 'use client'
+export const runtime = 'edge';
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import Link from 'next/link'
