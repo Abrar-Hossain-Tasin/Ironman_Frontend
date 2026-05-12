@@ -2,12 +2,20 @@
   "name": "ironman-frontend",
   "version": "0.1.0",
   "private": true,
-  "scripts": {
+  "//scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+     "build": "next build",
+     "start": "next start",
     "lint": "next lint"
-  },
+   },
+  "scripts": {
+  "dev": "next dev",
+  "build": "opennextjs-cloudflare build --dangerouslyUseUnsupportedNextVersion",
+  "start": "next start",
+  "lint": "next lint",
+  "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+  "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy"
+},
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
     "clsx": "^2.1.1",
