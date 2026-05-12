@@ -850,6 +850,8 @@
 //     </>
 //   )
 // }
+
+export const runtime = 'edge';
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'

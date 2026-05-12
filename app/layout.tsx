@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import './globals.css'
