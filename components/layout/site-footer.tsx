@@ -16,6 +16,11 @@ const footerLinks = {
     { href: '/pricing', label: 'Pricing' },
     { href: '/track', label: 'Track Order' },
     { href: '/login', label: 'Customer Portal' }
+  ],
+  legal: [
+    { href: '/legal/terms', label: 'Terms of Service' },
+    { href: '/legal/privacy', label: 'Privacy Policy' },
+    { href: '/legal/refund-policy', label: 'Refund Policy' }
   ]
 }
 
@@ -144,9 +149,9 @@ export function SiteFooter() {
             © {new Date().getFullYear()} IRONMAN Laundry. All rights reserved.
           </p>
           <div className="flex items-center gap-6">
-            {['Privacy Policy', 'Terms of Service'].map((label) => (
-              <Link key={label} href="#" className="font-body text-xs text-white/35 hover:text-white/70 transition-colors">
-                {label}
+            {footerLinks.legal.map((link) => (
+              <Link key={link.href} href={link.href} className="font-body text-xs text-white/35 hover:text-white/70 transition-colors">
+                {link.label}
               </Link>
             ))}
           </div>

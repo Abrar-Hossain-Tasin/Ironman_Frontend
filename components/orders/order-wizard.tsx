@@ -1,27 +1,40 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
   ArrowRight,
+  BadgePercent,
   CalendarClock,
   Check,
   ClipboardCheck,
   CreditCard,
+  Loader2,
   MapPin,
   Minus,
   PackageCheck,
   Plus,
   QrCode,
-  ShoppingBag
+  ShoppingBag,
+  Smartphone,
+  X
 } from 'lucide-react'
 import { RequireAuth } from '@/components/auth/require-auth'
-import { apiFetch, endpoints } from '@/lib/api'
+import { AddressMapPicker, type AddressMapValue } from '@/components/customer/address-map-picker'
+import { apiFetch, endpoints, ApiError } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
 import { decorateClothingTypes } from '@/lib/catalog'
 import { formatBdt, isoDate } from '@/lib/utils'
-import type { AddressResponse, ClothingType, OrderResponse, PaymentMethod, PricingCell, ServiceCategory } from '@/types'
+import type {
+  AddressResponse,
+  ClothingType,
+  OrderResponse,
+  PaymentMethod,
+  PricingCell,
+  QuoteResponse,
+  ServiceCategory
+} from '@/types'
 
 type QuantityMap = Record<string, number>
 
@@ -32,6 +45,46 @@ const steps = [
   { id: 4, label: 'Schedule', icon: CalendarClock },
   { id: 5, label: 'Review', icon: ClipboardCheck }
 ] as const
+
+type PaymentOption = {
+  id: PaymentMethod
+  title: string
+  body: string
+  icon: typeof CreditCard
+}
+
+const paymentOptions: PaymentOption[] = [
+  {
+    id: 'cod',
+    title: 'Cash on delivery',
+    body: 'Pay the delivery man in cash at handover. Both you and the delivery man confirm payment in-app.',
+    icon: CreditCard
+  },
+  {
+    id: 'bkash',
+    title: 'bKash merchant',
+    body: 'Scan our merchant QR after pickup and submit the bKash transaction ID from your order page.',
+    icon: QrCode
+  },
+  {
+    id: 'nagad',
+    title: 'Nagad',
+    body: 'Send to our Nagad merchant after pickup and submit the reference from your order page.',
+    icon: Smartphone
+  },
+  {
+    id: 'rocket',
+    title: 'Rocket',
+    body: 'Send to our Rocket merchant after pickup and submit the reference from your order page.',
+    icon: Smartphone
+  },
+  {
+    id: 'card',
+    title: 'Card',
+    body: 'Pay with a debit or credit card via our payment partner. You will be redirected after pickup.',
+    icon: CreditCard
+  }
+]
 
 export function OrderWizard() {
   const router = useRouter()
@@ -51,9 +104,31 @@ export function OrderWizard() {
   const [deliverySlot, setDeliverySlot] = useState('14:00-18:00')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod')
   const [specialInstructions, setSpecialInstructions] = useState('')
-  const [newAddress, setNewAddress] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // New-address dialog state (with map pin)
+  const [addressFormOpen, setAddressFormOpen] = useState(false)
+  const [addressForm, setAddressForm] = useState<NewAddressForm>({
+    label: 'Home',
+    addressLine1: '',
+    addressLine2: '',
+    area: '',
+    city: 'Dhaka',
+    postalCode: '',
+    latitude: null,
+    longitude: null,
+    defaultAddress: false
+  })
+  const [savingAddress, setSavingAddress] = useState(false)
+
+  // Coupon & quote state
+  const [couponInput, setCouponInput] = useState('')
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null)
+  const [quote, setQuote] = useState<QuoteResponse | null>(null)
+  const [quoteLoading, setQuoteLoading] = useState(false)
+  const [quoteError, setQuoteError] = useState<string | null>(null)
+  const quoteSeq = useRef(0)
 
   useEffect(() => {
     if (!token) return
@@ -89,12 +164,60 @@ export function OrderWizard() {
       .filter((cell) => cell.quantity > 0)
   }, [pricing, quantities])
 
-  const total = selectedItems.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0)
+  const localSubtotal = selectedItems.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0)
   const pickupAddress = addresses.find((address) => address.id === pickupAddressId)
   const deliveryAddress = addresses.find((address) => address.id === deliveryAddressId)
   const blockedStep = firstInvalidStep()
   const readyToPlace = blockedStep === null
   const progressPercent = ((Math.max(step, highestAvailableStep()) - 1) / (steps.length - 1)) * 100
+
+  // ── Server quote ───────────────────────────────────────────────────────
+  // Re-quote whenever the cart or applied coupon changes. Debounced so
+  // single-tap qty bumps don't fire one request per click.
+  useEffect(() => {
+    if (!token) return
+    if (!selectedItems.length) {
+      setQuote(null)
+      setQuoteError(null)
+      return
+    }
+
+    const seq = ++quoteSeq.current
+    setQuoteLoading(true)
+    const timer = setTimeout(async () => {
+      try {
+        const response = await apiFetch<QuoteResponse>('/orders/quote', {
+          method: 'POST',
+          token,
+          body: {
+            items: selectedItems.map((item) => ({
+              clothingTypeId: item.clothingTypeId,
+              serviceCategoryId: item.serviceCategoryId,
+              quantity: item.quantity,
+              notes: ''
+            })),
+            couponCode: appliedCoupon ?? null
+          }
+        })
+        if (seq !== quoteSeq.current) return
+        setQuote(response)
+        setQuoteError(null)
+      } catch (err) {
+        if (seq !== quoteSeq.current) return
+        setQuote(null)
+        const msg = err instanceof Error ? err.message : 'Could not refresh price'
+        setQuoteError(msg)
+      } finally {
+        if (seq === quoteSeq.current) setQuoteLoading(false)
+      }
+    }, 350)
+
+    return () => clearTimeout(timer)
+  }, [token, selectedItems, appliedCoupon])
+
+  const discountAmount = Number(quote?.discountAmount ?? 0)
+  const total = Number(quote?.total ?? localSubtotal)
+  const appliedCode = quote?.appliedCouponCode ?? null
 
   function stepError(stepId: number) {
     if (stepId === 1) {
@@ -177,29 +300,67 @@ export function OrderWizard() {
     }))
   }
 
-  async function addAddress() {
+  function openAddressForm() {
+    setAddressForm({
+      label: addresses.length ? 'Other' : 'Home',
+      addressLine1: '',
+      addressLine2: '',
+      area: '',
+      city: 'Dhaka',
+      postalCode: '',
+      latitude: null,
+      longitude: null,
+      defaultAddress: addresses.length === 0
+    })
+    setAddressFormOpen(true)
+    setError(null)
+  }
+
+  async function saveAddress() {
     if (!token) return
-    if (!newAddress.trim()) {
-      setError('Enter an address before adding it')
+    if (!addressForm.addressLine1.trim() || !addressForm.area.trim() || !addressForm.city.trim()) {
+      setError('Fill address line, area, and city')
       return
     }
+    setSavingAddress(true)
+    try {
+      const saved = await apiFetch<AddressResponse>('/users/me/addresses', {
+        method: 'POST',
+        token,
+        body: {
+          label: addressForm.label.trim() || 'Home',
+          addressLine1: addressForm.addressLine1.trim(),
+          addressLine2: addressForm.addressLine2.trim() || null,
+          area: addressForm.area.trim(),
+          city: addressForm.city.trim(),
+          postalCode: addressForm.postalCode.trim() || null,
+          latitude: addressForm.latitude,
+          longitude: addressForm.longitude,
+          defaultAddress: addressForm.defaultAddress
+        }
+      })
+      setAddresses((current) => [...current, saved])
+      setPickupAddressId((current) => current || saved.id)
+      setDeliveryAddressId((current) => current || saved.id)
+      setAddressFormOpen(false)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save address')
+    } finally {
+      setSavingAddress(false)
+    }
+  }
 
-    const saved = await apiFetch<AddressResponse>('/users/me/addresses', {
-      method: 'POST',
-      token,
-      body: {
-        label: addresses.length ? 'Other' : 'Home',
-        addressLine1: newAddress.trim(),
-        area: 'Dhaka',
-        city: 'Dhaka',
-        defaultAddress: addresses.length === 0
-      }
-    })
-    setAddresses((current) => [...current, saved])
-    setPickupAddressId((current) => current || saved.id)
-    setDeliveryAddressId((current) => current || saved.id)
-    setNewAddress('')
-    setError(null)
+  async function applyCoupon() {
+    const code = couponInput.trim().toUpperCase()
+    if (!code) return
+    setAppliedCoupon(code)
+    setCouponInput('')
+  }
+
+  function clearCoupon() {
+    setAppliedCoupon(null)
+    setQuoteError(null)
   }
 
   async function placeOrder() {
@@ -232,6 +393,7 @@ export function OrderWizard() {
           preferredDeliveryTimeSlot: deliverySlot,
           specialInstructions,
           paymentMethod,
+          couponCode: appliedCoupon ?? null,
           items: selectedItems.map((item) => ({
             clothingTypeId: item.clothingTypeId,
             serviceCategoryId: item.serviceCategoryId,
@@ -242,7 +404,8 @@ export function OrderWizard() {
       })
       router.push(`/customer/orders/${order.id}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not place order')
+      const msg = err instanceof ApiError ? err.detail || err.message : err instanceof Error ? err.message : 'Could not place order'
+      setError(msg || 'Could not place order')
     } finally {
       setLoading(false)
     }
@@ -308,9 +471,7 @@ export function OrderWizard() {
               selectedId={pickupAddressId}
               addresses={addresses}
               onSelect={setPickupAddressId}
-              newAddress={newAddress}
-              setNewAddress={setNewAddress}
-              addAddress={addAddress}
+              onAdd={openAddressForm}
             />
           ) : null}
 
@@ -320,9 +481,7 @@ export function OrderWizard() {
               selectedId={deliveryAddressId}
               addresses={addresses}
               onSelect={setDeliveryAddressId}
-              newAddress={newAddress}
-              setNewAddress={setNewAddress}
-              addAddress={addAddress}
+              onAdd={openAddressForm}
             />
           ) : null}
 
@@ -413,20 +572,16 @@ export function OrderWizard() {
               <div className="mt-5">
                 <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Payment method</p>
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  <PaymentMethodButton
-                    active={paymentMethod === 'cod'}
-                    icon={CreditCard}
-                    title="Pay delivery man"
-                    body="Customer pays cash or direct handover to delivery staff. The delivery man confirms receipt in the app."
-                    onClick={() => setPaymentMethod('cod')}
-                  />
-                  <PaymentMethodButton
-                    active={paymentMethod === 'online'}
-                    icon={QrCode}
-                    title="Merchant bKash QR"
-                    body="Customer scans the company merchant QR and submits the bKash transaction ID from the order page."
-                    onClick={() => setPaymentMethod('online')}
-                  />
+                  {paymentOptions.map((option) => (
+                    <PaymentMethodButton
+                      key={option.id}
+                      active={paymentMethod === option.id}
+                      icon={option.icon}
+                      title={option.title}
+                      body={option.body}
+                      onClick={() => setPaymentMethod(option.id)}
+                    />
+                  ))}
                 </div>
               </div>
 
@@ -476,6 +631,64 @@ export function OrderWizard() {
               </div>
             )) : <p className="text-sm text-gray-500">No items selected</p>}
           </div>
+
+          {selectedItems.length ? (
+            <div className="mt-4 space-y-2 border-t border-ironman-navy-100 pt-4">
+              <div className="flex justify-between text-sm text-gray-600">
+                <span>Subtotal</span>
+                <span>{formatBdt(localSubtotal)}</span>
+              </div>
+              {appliedCode && discountAmount > 0 ? (
+                <div className="flex items-center justify-between text-sm font-semibold text-emerald-700">
+                  <span className="inline-flex items-center gap-1">
+                    <BadgePercent className="h-3.5 w-3.5" aria-hidden />
+                    {appliedCode}
+                  </span>
+                  <span>− {formatBdt(discountAmount)}</span>
+                </div>
+              ) : null}
+              {quoteLoading ? (
+                <p className="inline-flex items-center gap-1 text-xs text-gray-500">
+                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> Refreshing total…
+                </p>
+              ) : null}
+              {quoteError ? <p className="text-xs text-ironman-red">{quoteError}</p> : null}
+
+              <div className="mt-3 rounded-lg bg-ironman-navy-50 p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Promo / coupon</p>
+                {appliedCoupon ? (
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <span className="rounded-md bg-white px-2 py-1 text-xs font-bold text-ironman-navy">{appliedCoupon}</span>
+                    <button
+                      type="button"
+                      onClick={clearCoupon}
+                      className="text-xs font-semibold text-ironman-red focus-ring rounded"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      className="tap-target min-w-0 flex-1 rounded-md border border-ironman-navy-100 bg-white px-2 py-1.5 text-sm uppercase focus-ring"
+                      placeholder="Code"
+                      value={couponInput}
+                      onChange={(event) => setCouponInput(event.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={applyCoupon}
+                      disabled={!couponInput.trim()}
+                      className="tap-target rounded-md bg-ironman-navy px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+
           <div className="mt-4 border-t border-ironman-navy-100 pt-4">
             <div className="flex justify-between text-xl font-bold text-ironman-navy">
               <span>Total</span>
@@ -493,8 +706,30 @@ export function OrderWizard() {
           </div>
         </aside>
       </div>
+
+      {addressFormOpen ? (
+        <AddressFormModal
+          form={addressForm}
+          onChange={setAddressForm}
+          onClose={() => setAddressFormOpen(false)}
+          onSubmit={saveAddress}
+          submitting={savingAddress}
+        />
+      ) : null}
     </RequireAuth>
   )
+}
+
+type NewAddressForm = {
+  label: string
+  addressLine1: string
+  addressLine2: string
+  area: string
+  city: string
+  postalCode: string
+  latitude: number | null
+  longitude: number | null
+  defaultAddress: boolean
 }
 
 type AddressStepProps = {
@@ -502,34 +737,137 @@ type AddressStepProps = {
   selectedId: string
   addresses: AddressResponse[]
   onSelect: (id: string) => void
-  newAddress: string
-  setNewAddress: (value: string) => void
-  addAddress: () => void
+  onAdd: () => void
 }
 
-function AddressStep({ title, selectedId, addresses, onSelect, newAddress, setNewAddress, addAddress }: AddressStepProps) {
+function AddressStep({ title, selectedId, addresses, onSelect, onAdd }: AddressStepProps) {
   return (
     <div>
-      <h2 className="text-xl font-bold text-ironman-navy">{title}</h2>
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
-        {addresses.map((address) => {
-          const selected = selectedId === address.id
-          return (
-            <button
-              key={address.id}
-              type="button"
-              onClick={() => onSelect(address.id)}
-              className={`focus-ring rounded-lg border p-4 text-left ${selected ? 'border-ironman-red bg-ironman-red-50' : 'border-ironman-navy-100 bg-white'}`}
-            >
-              <p className="font-bold text-ironman-navy">{address.label}</p>
-              <p className="mt-2 text-sm text-gray-600">{addressText(address)}</p>
-            </button>
-          )
-        })}
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xl font-bold text-ironman-navy">{title}</h2>
+        <button
+          type="button"
+          onClick={onAdd}
+          className="tap-target focus-ring inline-flex items-center gap-1 rounded-lg bg-ironman-navy px-3 py-2 text-sm font-semibold text-white"
+        >
+          <Plus className="h-4 w-4" aria-hidden />
+          Add new
+        </button>
       </div>
-      <div className="mt-4 flex gap-2">
-        <input className="tap-target min-w-0 flex-1 rounded-lg border border-ironman-navy-100 bg-ironman-navy-50 px-3 py-2 focus-ring" placeholder="Add address" value={newAddress} onChange={(event) => setNewAddress(event.target.value)} />
-        <button className="tap-target rounded-lg bg-ironman-navy px-4 py-2 font-semibold text-white disabled:opacity-60" type="button" onClick={addAddress} disabled={!newAddress.trim()}>Add</button>
+      {addresses.length ? (
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {addresses.map((address) => {
+            const selected = selectedId === address.id
+            return (
+              <button
+                key={address.id}
+                type="button"
+                onClick={() => onSelect(address.id)}
+                className={`focus-ring rounded-lg border p-4 text-left ${selected ? 'border-ironman-red bg-ironman-red-50' : 'border-ironman-navy-100 bg-white'}`}
+              >
+                <p className="font-bold text-ironman-navy">{address.label}</p>
+                <p className="mt-2 text-sm text-gray-600">{addressText(address)}</p>
+                {address.latitude != null && address.longitude != null ? (
+                  <p className="mt-2 inline-flex items-center gap-1 text-xs text-gray-500">
+                    <MapPin className="h-3 w-3 text-ironman-red" aria-hidden />
+                    Pinned on map
+                  </p>
+                ) : null}
+              </button>
+            )
+          })}
+        </div>
+      ) : (
+        <p className="mt-4 rounded-lg border border-dashed border-ironman-navy-100 bg-ironman-navy-50 p-6 text-center text-sm text-gray-600">
+          You don&apos;t have any saved addresses yet. Tap <strong>Add new</strong> to pin one on the map.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function AddressFormModal({
+  form,
+  onChange,
+  onClose,
+  onSubmit,
+  submitting
+}: {
+  form: NewAddressForm
+  onChange: (next: NewAddressForm) => void
+  onClose: () => void
+  onSubmit: () => void
+  submitting: boolean
+}) {
+  const setField = <K extends keyof NewAddressForm>(key: K, value: NewAddressForm[K]) => onChange({ ...form, [key]: value })
+
+  const handleMapChange = (next: AddressMapValue) => {
+    onChange({
+      ...form,
+      latitude: next.latitude,
+      longitude: next.longitude,
+      addressLine1: form.addressLine1 || (next.resolvedAddress ?? '')
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center" role="dialog" aria-modal="true">
+      <div className="w-full max-w-2xl overflow-hidden rounded-lg bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-ironman-navy-100 px-5 py-3">
+          <h3 className="text-lg font-bold text-ironman-navy">Add a new address</h3>
+          <button type="button" onClick={onClose} className="focus-ring rounded-full p-1 text-ironman-navy">
+            <X className="h-5 w-5" aria-hidden />
+          </button>
+        </div>
+        <div className="max-h-[80vh] overflow-y-auto p-5">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="sm:col-span-2">
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Label</span>
+              <input className="tap-target mt-1 w-full rounded-lg border border-ironman-navy-100 bg-ironman-navy-50 px-3 py-2 focus-ring" value={form.label} onChange={(e) => setField('label', e.target.value)} />
+            </label>
+            <label className="sm:col-span-2">
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Address line 1</span>
+              <input className="tap-target mt-1 w-full rounded-lg border border-ironman-navy-100 bg-ironman-navy-50 px-3 py-2 focus-ring" value={form.addressLine1} onChange={(e) => setField('addressLine1', e.target.value)} />
+            </label>
+            <label className="sm:col-span-2">
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Address line 2 (optional)</span>
+              <input className="tap-target mt-1 w-full rounded-lg border border-ironman-navy-100 bg-ironman-navy-50 px-3 py-2 focus-ring" value={form.addressLine2} onChange={(e) => setField('addressLine2', e.target.value)} />
+            </label>
+            <label>
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Area</span>
+              <input className="tap-target mt-1 w-full rounded-lg border border-ironman-navy-100 bg-ironman-navy-50 px-3 py-2 focus-ring" value={form.area} onChange={(e) => setField('area', e.target.value)} />
+            </label>
+            <label>
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">City</span>
+              <input className="tap-target mt-1 w-full rounded-lg border border-ironman-navy-100 bg-ironman-navy-50 px-3 py-2 focus-ring" value={form.city} onChange={(e) => setField('city', e.target.value)} />
+            </label>
+            <label>
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Postal code</span>
+              <input className="tap-target mt-1 w-full rounded-lg border border-ironman-navy-100 bg-ironman-navy-50 px-3 py-2 focus-ring" value={form.postalCode} onChange={(e) => setField('postalCode', e.target.value)} />
+            </label>
+            <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-ironman-navy">
+              <input type="checkbox" checked={form.defaultAddress} onChange={(e) => setField('defaultAddress', e.target.checked)} />
+              Set as default address
+            </label>
+          </div>
+
+          <div className="mt-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Drop the pin</p>
+            <p className="mb-2 text-xs text-gray-500">Helps the delivery man find your exact gate.</p>
+            <AddressMapPicker
+              value={{ latitude: form.latitude, longitude: form.longitude, resolvedAddress: null }}
+              onChange={handleMapChange}
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 border-t border-ironman-navy-100 bg-ironman-navy-50 px-5 py-3">
+          <button type="button" onClick={onClose} className="tap-target rounded-lg border border-ironman-navy-100 bg-white px-4 py-2 text-sm font-semibold text-ironman-navy">
+            Cancel
+          </button>
+          <button type="button" onClick={onSubmit} disabled={submitting} className="tap-target rounded-lg bg-ironman-red px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
+            {submitting ? 'Saving…' : 'Save address'}
+          </button>
+        </div>
       </div>
     </div>
   )

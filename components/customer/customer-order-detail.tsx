@@ -2,9 +2,17 @@
 
 import { useEffect, useState } from 'react'
 import { RequireAuth } from '@/components/auth/require-auth'
+import { CodConfirmPanel } from '@/components/customer/cod-confirm-panel'
+import { OrderCancelPanel } from '@/components/customer/order-cancel-panel'
+import { OrderIssuesPanel } from '@/components/customer/order-issues-panel'
+import { OrderRefundsPanel } from '@/components/customer/order-refunds-panel'
+import { OrderReschedulePanel } from '@/components/customer/order-reschedule-panel'
+import { OrderReviewPanel } from '@/components/customer/order-review-panel'
+import { ReceiptPanel } from '@/components/customer/receipt-panel'
 import { OrderPaymentPanel } from '@/components/payments/order-payment-panel'
 import { PaymentLedger } from '@/components/payments/payment-ledger'
 import { LiveLocationPanel } from '@/components/tracking/live-location-panel'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { TrackingTimeline } from '@/components/ui/tracking-timeline'
 import { apiFetch } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
@@ -48,7 +56,13 @@ export function CustomerOrderDetail({ id }: CustomerOrderDetailProps) {
 
   useEffect(() => {
     load().catch((err) => setError(err instanceof Error ? err.message : 'Could not load order'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, token])
+
+  const discount = order ? Number(order.discountAmount ?? 0) : 0
+  const subtotalFromItems = order
+    ? order.items.reduce((sum, item) => sum + Number(item.subtotal), 0)
+    : 0
 
   return (
     <RequireAuth roles={['customer']}>
@@ -57,13 +71,44 @@ export function CustomerOrderDetail({ id }: CustomerOrderDetailProps) {
         <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
           <section className="space-y-6">
             <div className="rounded-lg border border-ironman-navy-100 bg-white p-5 shadow-soft">
-              <h2 className="text-xl font-bold text-ironman-navy">Summary</h2>
-              <dl className="mt-4 grid gap-4 md:grid-cols-3">
-                <div><dt className="text-xs uppercase tracking-wide text-gray-500">Items</dt><dd className="mt-1 font-bold text-ironman-navy">{order.items.reduce((sum, item) => sum + item.quantity, 0)}</dd></div>
-                <div><dt className="text-xs uppercase tracking-wide text-gray-500">Total</dt><dd className="mt-1 font-bold text-ironman-navy">{formatBdt(Number(order.totalAmount))}</dd></div>
-                <div><dt className="text-xs uppercase tracking-wide text-gray-500">Paid</dt><dd className="mt-1 font-bold text-ironman-navy">{formatBdt(Number(order.paidAmount))}</dd></div>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Order</p>
+                  <h2 className="text-xl font-bold text-ironman-navy">{order.orderNumber}</h2>
+                </div>
+                <StatusBadge status={order.status} />
+              </div>
+              <dl className="mt-4 grid gap-4 sm:grid-cols-3">
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-gray-500">Items</dt>
+                  <dd className="mt-1 font-bold text-ironman-navy">{order.items.reduce((sum, item) => sum + item.quantity, 0)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-gray-500">Total</dt>
+                  <dd className="mt-1 font-bold text-ironman-navy">{formatBdt(Number(order.totalAmount))}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-gray-500">Paid</dt>
+                  <dd className="mt-1 font-bold text-ironman-navy">{formatBdt(Number(order.paidAmount))}</dd>
+                </div>
               </dl>
+              {discount > 0 ? (
+                <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                  Coupon {order.couponCode ?? ''} · −{formatBdt(discount)} off (subtotal {formatBdt(subtotalFromItems)})
+                </p>
+              ) : null}
             </div>
+
+            <OrderReschedulePanel order={order} token={token} onRescheduled={(next) => setOrder(next)} />
+
+            <CodConfirmPanel
+              order={order}
+              token={token}
+              onConfirmed={() => {
+                void load()
+              }}
+            />
+
             <OrderPaymentPanel
               order={order}
               token={token}
@@ -72,6 +117,22 @@ export function CustomerOrderDetail({ id }: CustomerOrderDetailProps) {
               }}
             />
             <PaymentLedger payments={payments} />
+
+            <ReceiptPanel order={order} token={token} />
+
+            <OrderReviewPanel order={order} token={token} />
+
+            <OrderIssuesPanel order={order} token={token} />
+
+            <OrderRefundsPanel orderId={order.id} token={token} />
+
+            <OrderCancelPanel
+              order={order}
+              token={token}
+              onCancelled={() => {
+                void load()
+              }}
+            />
           </section>
 
           <section className="space-y-6">
