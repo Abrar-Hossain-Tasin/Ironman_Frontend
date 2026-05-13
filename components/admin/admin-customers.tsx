@@ -1,122 +1,168 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { AlertOctagon, ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { RequireAuth } from '@/components/auth/require-auth'
 import { apiFetch } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
 import { formatBdt } from '@/lib/utils'
-import type { OrderResponse } from '@/types'
+import type { CustomerListResponse } from '@/types'
 
-type CustomerRow = {
-  id: string
-  fullName: string
-  email: string
-  phone: string
-  orderCount: number
-  totalSpent: number
-  lastOrderAt: string
-}
+const PAGE_SIZE = 25
 
 export function AdminCustomers() {
   const token = useAuthStore((state) => state.accessToken)
-  const [orders, setOrders] = useState<OrderResponse[]>([])
+  const [data, setData] = useState<CustomerListResponse | null>(null)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [page, setPage] = useState(0)
+
+  // Debounce text input — every keystroke hitting the API was the old pain.
+  useEffect(() => {
+    const handle = window.setTimeout(() => setDebouncedSearch(search.trim()), 300)
+    return () => window.clearTimeout(handle)
+  }, [search])
+
+  // Search changes → bounce back to page 0.
+  useEffect(() => {
+    setPage(0)
+  }, [debouncedSearch])
 
   useEffect(() => {
     if (!token) return
+    let cancelled = false
     setLoading(true)
-    apiFetch<OrderResponse[]>('/admin/orders', { token })
-      .then(setOrders)
-      .finally(() => setLoading(false))
-  }, [token])
-
-  const rows = useMemo<CustomerRow[]>(() => {
-    const byCustomer = new Map<string, CustomerRow>()
-    for (const order of orders) {
-      const id = order.customer.id
-      const existing = byCustomer.get(id)
-      if (!existing) {
-        byCustomer.set(id, {
-          id,
-          fullName: order.customer.fullName,
-          email: order.customer.email,
-          phone: order.customer.phone,
-          orderCount: 1,
-          totalSpent: Number(order.totalAmount),
-          lastOrderAt: order.createdAt
-        })
-      } else {
-        existing.orderCount += 1
-        existing.totalSpent += Number(order.totalAmount)
-        if (order.createdAt > existing.lastOrderAt) existing.lastOrderAt = order.createdAt
-      }
-    }
-    const query = search.trim().toLowerCase()
-    return [...byCustomer.values()]
-      .filter((row) => {
-        if (!query) return true
-        return (
-          row.fullName.toLowerCase().includes(query) ||
-          row.email.toLowerCase().includes(query) ||
-          row.phone.toLowerCase().includes(query)
-        )
+    setError(null)
+    const params = new URLSearchParams({ page: String(page), size: String(PAGE_SIZE) })
+    if (debouncedSearch) params.set('q', debouncedSearch)
+    apiFetch<CustomerListResponse>(`/admin/customers?${params.toString()}`, { token })
+      .then((res) => {
+        if (!cancelled) setData(res)
       })
-      .sort((a, b) => b.lastOrderAt.localeCompare(a.lastOrderAt))
-  }, [orders, search])
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load customers')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [token, debouncedSearch, page])
+
+  const rows = data?.content ?? []
+  const totalPages = data?.totalPages ?? 1
+  const totalElements = data?.totalElements ?? 0
 
   return (
     <RequireAuth roles={['admin']}>
       <div className="mb-4 grid gap-3 md:grid-cols-3">
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search by name, email, or phone"
-          className="tap-target rounded-lg border border-ironman-navy-100 bg-white px-3 py-2 focus-ring md:col-span-2"
-        />
+        <label className="relative md:col-span-2 block">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search by name, email, or phone"
+            className="tap-target w-full rounded-lg border border-ironman-navy-100 bg-white pl-9 pr-3 py-2 focus-ring"
+          />
+        </label>
         <p className="self-center text-xs text-gray-500">
-          {rows.length} customer{rows.length === 1 ? '' : 's'} · derived from order history
+          {totalElements} customer{totalElements === 1 ? '' : 's'} total
         </p>
       </div>
 
-      {loading ? (
-        <p className="text-sm text-gray-500">Loading…</p>
+      {error ? (
+        <p className="mb-4 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p>
+      ) : null}
+
+      {loading && rows.length === 0 ? (
+        <p className="rounded-lg bg-white p-5 text-sm text-gray-500 shadow-soft">Loading customers…</p>
       ) : rows.length === 0 ? (
-        <p className="rounded-lg bg-white p-5 text-sm text-gray-600 shadow-soft">No customers yet.</p>
+        <p className="rounded-lg bg-white p-5 text-sm text-gray-600 shadow-soft">
+          {debouncedSearch ? 'No customers match that search.' : 'No customers yet.'}
+        </p>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-ironman-navy-100 bg-white shadow-soft">
-          <table className="w-full text-sm">
-            <thead className="bg-ironman-navy-50 text-left text-xs uppercase text-gray-600">
-              <tr>
-                <th className="px-3 py-2">Customer</th>
-                <th className="px-3 py-2">Contact</th>
-                <th className="px-3 py-2 text-right">Orders</th>
-                <th className="px-3 py-2 text-right">Total spent</th>
-                <th className="px-3 py-2">Last order</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} className="border-t border-ironman-navy-100">
-                  <td className="px-3 py-2">
-                    <Link href={`/admin/customers/${row.id}`} className="font-bold text-ironman-red hover:underline">
-                      {row.fullName}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2 text-xs text-gray-600">
-                    {row.email}
-                    <br />
-                    {row.phone}
-                  </td>
-                  <td className="px-3 py-2 text-right">{row.orderCount}</td>
-                  <td className="px-3 py-2 text-right font-semibold">{formatBdt(row.totalSpent)}</td>
-                  <td className="px-3 py-2 text-xs text-gray-600">{new Date(row.lastOrderAt).toLocaleDateString()}</td>
+        <>
+          <div className="overflow-hidden rounded-lg border border-ironman-navy-100 bg-white shadow-soft">
+            <table className="w-full text-sm">
+              <thead className="bg-ironman-navy-50 text-left text-xs uppercase text-gray-600">
+                <tr>
+                  <th className="px-3 py-2">Customer</th>
+                  <th className="px-3 py-2">Contact</th>
+                  <th className="px-3 py-2 text-right">Orders</th>
+                  <th className="px-3 py-2 text-right">Total spent</th>
+                  <th className="px-3 py-2 text-right">Paid</th>
+                  <th className="px-3 py-2 text-right">Issues</th>
+                  <th className="px-3 py-2">Last order</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id} className="border-t border-ironman-navy-100">
+                    <td className="px-3 py-2">
+                      <Link href={`/admin/customers/${row.id}`} className="font-bold text-ironman-red hover:underline">
+                        {row.fullName}
+                      </Link>
+                      {!row.active ? (
+                        <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+                          Inactive
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-gray-600">
+                      {row.email}
+                      <br />
+                      {row.phone}
+                    </td>
+                    <td className="px-3 py-2 text-right">{row.orderCount}</td>
+                    <td className="px-3 py-2 text-right font-semibold">{formatBdt(Number(row.totalSpent))}</td>
+                    <td className="px-3 py-2 text-right text-emerald-700">{formatBdt(Number(row.totalPaid))}</td>
+                    <td className="px-3 py-2 text-right">
+                      {row.openIssues > 0 ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-ironman-red-50 px-2 py-0.5 text-xs font-bold text-ironman-red">
+                          <AlertOctagon className="h-3 w-3" aria-hidden />
+                          {row.openIssues}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-gray-600">
+                      {row.lastOrderAt ? new Date(row.lastOrderAt).toLocaleDateString() : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <nav className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm" aria-label="Pagination">
+            <p className="text-gray-500">
+              Page {page + 1} of {totalPages}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page === 0 || loading}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                className="focus-ring inline-flex items-center gap-1 rounded-lg border border-ironman-navy-100 bg-white px-3 py-1.5 font-semibold text-ironman-navy disabled:opacity-50"
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden /> Prev
+              </button>
+              <button
+                type="button"
+                disabled={page + 1 >= totalPages || loading}
+                onClick={() => setPage((p) => p + 1)}
+                className="focus-ring inline-flex items-center gap-1 rounded-lg border border-ironman-navy-100 bg-white px-3 py-1.5 font-semibold text-ironman-navy disabled:opacity-50"
+              >
+                Next <ChevronRight className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+          </nav>
+        </>
       )}
     </RequireAuth>
   )

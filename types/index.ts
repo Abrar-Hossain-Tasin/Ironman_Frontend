@@ -339,3 +339,87 @@ export type NotificationResponse = {
   read: boolean
   createdAt: string
 }
+
+// ── Admin: customers list + detail envelope ──────────────────────────────
+export type CustomerSummary = {
+  id: string
+  fullName: string
+  email: string
+  phone: string
+  active: boolean
+  emailVerified: boolean
+  createdAt: string
+  orderCount: number
+  totalSpent: number
+  totalPaid: number
+  openIssues: number
+  lastOrderAt?: string | null
+}
+
+export type CustomerListResponse = {
+  content: CustomerSummary[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+}
+
+export type CustomerDetailResponse = {
+  id: string
+  fullName: string
+  email: string
+  phone: string
+  active: boolean
+  emailVerified: boolean
+  createdAt: string
+  addresses: AddressResponse[]
+  orderCount: number
+  totalSpent: number
+  totalPaid: number
+  totalRefunded: number
+  openIssues: number
+  orders: OrderResponse[]
+  payments: PaymentLedgerRow[]
+  refunds: RefundResponse[]
+  issues: IssueResponse[]
+}
+
+// ── Admin reports summary ────────────────────────────────────────────────
+export type ReportSummaryResponse = {
+  windowDays: number
+  orderCount: number
+  deliveredCount: number
+  failedCount: number
+  deliverySuccessPct?: number | null
+  grossRevenue: number
+  refundedAmount: number
+  netRevenue: number
+  averageOrderValue: number
+  topServices: { name: string; quantity: number }[]
+  topCollectors: { name: string; total: number; count: number }[]
+  daily: { date: string; orders: number; revenue: number }[]
+}
+
+// ── Pickup / delivery slot capacity ──────────────────────────────────────
+export type SlotRow = {
+  slot: string
+  capacity: number
+  booked: number
+  remaining: number
+  full: boolean
+}
+
+export type SlotAvailabilityResponse = {
+  date: string
+  pickup: SlotRow[]
+  delivery: SlotRow[]
+}
+
+// ── Delivery agent earnings ──────────────────────────────────────────────
+export type DeliveryEarningsResponse = {
+  from: string
+  to: string
+  totalCollected: number
+  transactionCount: number
+  payments: PaymentLedgerRow[]
+}

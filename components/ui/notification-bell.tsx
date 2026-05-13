@@ -2,12 +2,43 @@
 
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
-import { Bell, Check, CheckCheck } from 'lucide-react'
+import {
+  AlertOctagon,
+  Bell,
+  BellRing,
+  Check,
+  CheckCheck,
+  CreditCard,
+  PackageCheck,
+  Receipt,
+  Send,
+  Star,
+  Truck,
+  WalletCards
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
 import { getSupabaseClient } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import type { NotificationResponse } from '@/types'
+
+// Pick an icon + tone for a notification by its `type` discriminator. Unknown
+// types fall back to the generic bell — adding a new server-side type doesn't
+// break the UI, it just looks generic until we add a row here.
+function iconForType(type: string): { Icon: LucideIcon; tone: string } {
+  const t = (type || '').toLowerCase()
+  if (t.includes('cod') || t.includes('payment') || t.includes('paid')) return { Icon: WalletCards, tone: 'text-emerald-600 bg-emerald-50' }
+  if (t.includes('receipt') || t.includes('invoice')) return { Icon: Receipt, tone: 'text-ironman-navy bg-ironman-navy-50' }
+  if (t.includes('refund')) return { Icon: CreditCard, tone: 'text-amber-600 bg-amber-50' }
+  if (t.includes('issue') || t.includes('dispute') || t.includes('damaged')) return { Icon: AlertOctagon, tone: 'text-ironman-red bg-ironman-red-50' }
+  if (t.includes('review') || t.includes('rating')) return { Icon: Star, tone: 'text-amber-600 bg-amber-50' }
+  if (t.includes('delivery') || t.includes('pickup') || t.includes('out_for')) return { Icon: Truck, tone: 'text-sky-600 bg-sky-50' }
+  if (t.includes('order') || t.includes('ready') || t.includes('confirmed')) return { Icon: PackageCheck, tone: 'text-ironman-red bg-ironman-red-50' }
+  if (t.includes('broadcast') || t.includes('announce')) return { Icon: Send, tone: 'text-ironman-navy bg-ironman-navy-50' }
+  if (t.includes('alert') || t.includes('reminder')) return { Icon: BellRing, tone: 'text-amber-600 bg-amber-50' }
+  return { Icon: Bell, tone: 'text-gray-500 bg-gray-50' }
+}
 
 const MAX_PANEL_ITEMS = 8
 
@@ -168,37 +199,36 @@ export function NotificationBell() {
                 You have no notifications yet.
               </li>
             ) : (
-              items.slice(0, MAX_PANEL_ITEMS).map((item) => (
-                <li
-                  key={item.id}
-                  className={cn('flex gap-3 px-4 py-3', !item.read && 'bg-ironman-navy-50/50')}
-                >
-                  <div
-                    className={cn(
-                      'mt-1 h-2 w-2 shrink-0 rounded-full',
-                      item.read ? 'bg-transparent' : 'bg-ironman-red'
-                    )}
-                    aria-hidden
-                  />
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-ironman-navy">{item.title}</p>
-                    <p className="mt-0.5 line-clamp-2 text-xs text-gray-600">{item.body}</p>
-                    <p className="mt-1 text-[11px] uppercase tracking-wide text-gray-400">
-                      {timeAgo(item.createdAt)}
-                    </p>
-                  </div>
-                  {!item.read ? (
-                    <button
-                      type="button"
-                      onClick={() => markOne(item.id)}
-                      aria-label="Mark as read"
-                      className="focus-ring shrink-0 self-start rounded-md p-1 text-gray-400 hover:bg-ironman-navy-50 hover:text-ironman-navy"
-                    >
-                      <Check className="h-3.5 w-3.5" aria-hidden />
-                    </button>
-                  ) : null}
-                </li>
-              ))
+              items.slice(0, MAX_PANEL_ITEMS).map((item) => {
+                const { Icon, tone } = iconForType(item.type)
+                return (
+                  <li
+                    key={item.id}
+                    className={cn('flex gap-3 px-4 py-3', !item.read && 'bg-ironman-navy-50/50')}
+                  >
+                    <div className={cn('mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full', tone)} aria-hidden>
+                      <Icon className="h-3.5 w-3.5" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-ironman-navy">{item.title}</p>
+                      <p className="mt-0.5 line-clamp-2 text-xs text-gray-600">{item.body}</p>
+                      <p className="mt-1 text-[11px] uppercase tracking-wide text-gray-400">
+                        {timeAgo(item.createdAt)}
+                      </p>
+                    </div>
+                    {!item.read ? (
+                      <button
+                        type="button"
+                        onClick={() => markOne(item.id)}
+                        aria-label="Mark as read"
+                        className="focus-ring shrink-0 self-start rounded-md p-1 text-gray-400 hover:bg-ironman-navy-50 hover:text-ironman-navy"
+                      >
+                        <Check className="h-3.5 w-3.5" aria-hidden />
+                      </button>
+                    ) : null}
+                  </li>
+                )
+              })
             )}
           </ul>
 

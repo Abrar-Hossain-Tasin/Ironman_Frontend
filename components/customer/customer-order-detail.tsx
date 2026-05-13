@@ -20,11 +20,36 @@ import { useOrderLiveLocation } from '@/lib/use-live-location'
 import { formatBdt } from '@/lib/utils'
 import type { OrderResponse, OrderStatus, PaymentLedgerRow, TrackingEvent } from '@/types'
 
-const liveLocationStatuses = new Set<OrderStatus>([
+const LIVE_LOCATION_STATUSES = new Set<OrderStatus>([
   'pickup_assigned',
   'delivery_assigned',
   'out_for_delivery'
 ])
+
+// Closed states never allow reschedule, cancel, or COD handshake.
+const CLOSED_STATUSES = new Set<OrderStatus>(['delivered', 'cancelled', 'returned', 'disputed'])
+
+// Reschedule is meaningful until pickup; after that pickup slot is locked,
+// and the panel's own guardrails handle the delivery side.
+const RESCHEDULE_STATUSES = new Set<OrderStatus>([
+  'pending',
+  'confirmed',
+  'pickup_assigned',
+  'picked_up',
+  'in_wash',
+  'wash_complete',
+  'in_dry_clean',
+  'dry_clean_complete',
+  'waiting_for_iron',
+  'in_iron',
+  'iron_complete',
+  'ready',
+  'delivery_assigned',
+  'out_for_delivery'
+])
+
+// Cancel is only allowed while the order hasn't been picked up yet.
+const CANCEL_STATUSES = new Set<OrderStatus>(['pending', 'confirmed', 'pickup_assigned'])
 
 type CustomerOrderDetailProps = {
   id: string
@@ -39,7 +64,7 @@ export function CustomerOrderDetail({ id }: CustomerOrderDetailProps) {
   const liveLocation = useOrderLiveLocation(
     order?.id,
     token,
-    Boolean(order && liveLocationStatuses.has(order.status))
+    Boolean(order && LIVE_LOCATION_STATUSES.has(order.status))
   )
 
   async function load() {
@@ -64,6 +89,17 @@ export function CustomerOrderDetail({ id }: CustomerOrderDetailProps) {
     ? order.items.reduce((sum, item) => sum + Number(item.subtotal), 0)
     : 0
 
+  const showReschedule = !!order && RESCHEDULE_STATUSES.has(order.status)
+  const showCod = !!order && order.paymentMethod === 'cod' && !CLOSED_STATUSES.has(order.status)
+  const balanceDue = order ? Math.max(0, Number(order.totalAmount) - Number(order.paidAmount)) : 0
+  const showPayment = !!order && balanceDue > 0 && !CLOSED_STATUSES.has(order.status)
+  const showReceipt =
+    !!order && (Number(order.paidAmount) > 0 || order.status === 'delivered' || order.codConfirmationStatus === 'delivery_confirmed')
+  const showReview = !!order && order.status === 'delivered'
+  const showIssues = !!order && (order.status === 'delivered' || order.status === 'disputed' || order.status === 'returned')
+  const showRefunds = !!order && (Number(order.paidAmount) > 0 || order.status === 'returned' || order.status === 'disputed')
+  const showCancel = !!order && CANCEL_STATUSES.has(order.status)
+
   return (
     <RequireAuth roles={['customer']}>
       {error ? <p className="mb-4 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p> : null}
@@ -81,7 +117,9 @@ export function CustomerOrderDetail({ id }: CustomerOrderDetailProps) {
               <dl className="mt-4 grid gap-4 sm:grid-cols-3">
                 <div>
                   <dt className="text-xs uppercase tracking-wide text-gray-500">Items</dt>
-                  <dd className="mt-1 font-bold text-ironman-navy">{order.items.reduce((sum, item) => sum + item.quantity, 0)}</dd>
+                  <dd className="mt-1 font-bold text-ironman-navy">
+                    {order.items.reduce((sum, item) => sum + item.quantity, 0)}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-xs uppercase tracking-wide text-gray-500">Total</dt>
@@ -99,40 +137,44 @@ export function CustomerOrderDetail({ id }: CustomerOrderDetailProps) {
               ) : null}
             </div>
 
-            <OrderReschedulePanel order={order} token={token} onRescheduled={(next) => setOrder(next)} />
+            {showReschedule ? (
+              <OrderReschedulePanel order={order} token={token} onRescheduled={(next) => setOrder(next)} />
+            ) : null}
 
-            <CodConfirmPanel
-              order={order}
-              token={token}
-              onConfirmed={() => {
-                void load()
-              }}
-            />
+            {showCod ? (
+              <CodConfirmPanel
+                order={order}
+                token={token}
+                onConfirmed={() => {
+                  void load()
+                }}
+              />
+            ) : null}
 
-            <OrderPaymentPanel
-              order={order}
-              token={token}
-              onPaymentRecorded={() => {
-                void load()
-              }}
-            />
-            <PaymentLedger payments={payments} />
+            {showPayment ? (
+              <OrderPaymentPanel
+                order={order}
+                token={token}
+                onPaymentRecorded={() => {
+                  void load()
+                }}
+              />
+            ) : null}
+            {payments.length > 0 ? <PaymentLedger payments={payments} /> : null}
 
-            <ReceiptPanel order={order} token={token} />
-
-            <OrderReviewPanel order={order} token={token} />
-
-            <OrderIssuesPanel order={order} token={token} />
-
-            <OrderRefundsPanel orderId={order.id} token={token} />
-
-            <OrderCancelPanel
-              order={order}
-              token={token}
-              onCancelled={() => {
-                void load()
-              }}
-            />
+            {showReceipt ? <ReceiptPanel order={order} token={token} /> : null}
+            {showReview ? <OrderReviewPanel order={order} token={token} /> : null}
+            {showIssues ? <OrderIssuesPanel order={order} token={token} /> : null}
+            {showRefunds ? <OrderRefundsPanel orderId={order.id} token={token} /> : null}
+            {showCancel ? (
+              <OrderCancelPanel
+                order={order}
+                token={token}
+                onCancelled={() => {
+                  void load()
+                }}
+              />
+            ) : null}
           </section>
 
           <section className="space-y-6">

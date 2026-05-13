@@ -2,6 +2,7 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { configureAuthRefresh } from '@/lib/api'
 import type { AuthResponse, UserSummary } from '@/types'
 
 type AuthState = {
@@ -38,6 +39,19 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 )
+
+// Wire the api layer to read/write tokens via the same store so a silent
+// refresh transparently updates every component that subscribes.
+configureAuthRefresh({
+  getRefreshToken: () => useAuthStore.getState().refreshToken,
+  onRefreshed: (auth) => useAuthStore.getState().setAuth(auth),
+  onAuthLost: () => {
+    useAuthStore.getState().clearAuth()
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+      window.location.assign('/login')
+    }
+  }
+})
 
 export function roleHome(role?: string) {
   if (role === 'admin') return '/admin/dashboard'

@@ -8,17 +8,22 @@ import { TrackingTimeline } from '@/components/ui/tracking-timeline'
 import type { TrackingEvent } from '@/types'
 
 export function PublicTracker() {
-  const [orderNumber, setOrderNumber] = useState('IRM-20260505-0042')
+  const [orderNumber, setOrderNumber] = useState('')
   const [events, setEvents] = useState<TrackingEvent[]>([])
   const [orderId, setOrderId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   async function search() {
+    const trimmed = orderNumber.trim()
+    if (!trimmed) {
+      setError('Enter an order number to track.')
+      return
+    }
     setLoading(true)
     setError(null)
     try {
-      const nextEvents = await apiFetch<TrackingEvent[]>(endpoints.tracking(orderNumber.trim()))
+      const nextEvents = await apiFetch<TrackingEvent[]>(endpoints.tracking(trimmed))
       setEvents(nextEvents)
       setOrderId(nextEvents[0]?.orderId ?? null)
     } catch (err) {
@@ -87,9 +92,15 @@ export function PublicTracker() {
           </div>
         </label>
         {error ? <p className="mt-4 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p> : null}
-        <p className="mt-4 rounded-lg bg-ironman-navy-50 px-3 py-2 text-sm font-semibold text-ironman-navy">
-          {orderNumber}
-        </p>
+        {orderNumber ? (
+          <p className="mt-4 rounded-lg bg-ironman-navy-50 px-3 py-2 text-sm font-semibold text-ironman-navy">
+            Searching: {orderNumber}
+          </p>
+        ) : (
+          <p className="mt-4 text-xs text-gray-500">
+            Your order number looks like <span className="font-mono">IRM-YYYYMMDD-NNNN</span>.
+          </p>
+        )}
       </section>
       <section className="rounded-lg border border-ironman-navy-100 bg-white p-5 shadow-soft">
         {events.length ? <TrackingTimeline events={events} /> : <p className="text-sm font-semibold text-ironman-navy">Enter an order number to load the live timeline.</p>}

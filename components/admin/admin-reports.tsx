@@ -6,176 +6,216 @@ import { MetricCard } from '@/components/ui/metric-card'
 import { apiFetch } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
 import { formatBdt } from '@/lib/utils'
-import type { OrderResponse, OrderStatus, PaymentLedgerRow, RefundResponse } from '@/types'
+import type { ReportSummaryResponse } from '@/types'
 
-type WindowKey = '7' | '30' | '90' | 'all'
-
-const WINDOW_LABEL: Record<WindowKey, string> = {
-  '7': 'Last 7 days',
-  '30': 'Last 30 days',
-  '90': 'Last 90 days',
-  all: 'All time'
-}
-
-const COMPLETED_STATUSES = new Set<OrderStatus>(['delivered'])
-const FAILED_STATUSES = new Set<OrderStatus>(['delivery_failed', 'returned', 'cancelled'])
-
-function withinWindow(iso: string, windowKey: WindowKey): boolean {
-  if (windowKey === 'all') return true
-  const days = Number(windowKey)
-  const ms = Date.now() - days * 24 * 60 * 60 * 1000
-  return new Date(iso).getTime() >= ms
-}
+const WINDOW_OPTIONS: { key: string; days: number; label: string }[] = [
+  { key: '7', days: 7, label: 'Last 7 days' },
+  { key: '30', days: 30, label: 'Last 30 days' },
+  { key: '90', days: 90, label: 'Last 90 days' },
+  { key: '365', days: 365, label: 'Last year' }
+]
 
 export function AdminReports() {
   const token = useAuthStore((state) => state.accessToken)
-  const [orders, setOrders] = useState<OrderResponse[]>([])
-  const [payments, setPayments] = useState<PaymentLedgerRow[]>([])
-  const [refunds, setRefunds] = useState<RefundResponse[]>([])
-  const [windowKey, setWindowKey] = useState<WindowKey>('30')
+  const [windowKey, setWindowKey] = useState('30')
+  const [data, setData] = useState<ReportSummaryResponse | null>(null)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const days = useMemo(
+    () => WINDOW_OPTIONS.find((opt) => opt.key === windowKey)?.days ?? 30,
+    [windowKey]
+  )
 
   useEffect(() => {
     if (!token) return
+    let cancelled = false
     setLoading(true)
-    Promise.all([
-      apiFetch<OrderResponse[]>('/admin/orders', { token }),
-      apiFetch<PaymentLedgerRow[]>('/payments', { token }),
-      apiFetch<RefundResponse[]>('/admin/refunds', { token }).catch(() => [] as RefundResponse[])
-    ])
-      .then(([nextOrders, nextPayments, nextRefunds]) => {
-        setOrders(nextOrders)
-        setPayments(nextPayments)
-        setRefunds(nextRefunds)
+    setError(null)
+    apiFetch<ReportSummaryResponse>(`/admin/reports/summary?window=${days}`, { token })
+      .then((res) => {
+        if (!cancelled) setData(res)
       })
-      .finally(() => setLoading(false))
-  }, [token])
-
-  const filteredOrders = useMemo(
-    () => orders.filter((order) => withinWindow(order.createdAt, windowKey)),
-    [orders, windowKey]
-  )
-  const filteredPayments = useMemo(
-    () => payments.filter((row) => withinWindow(row.collectedAt, windowKey)),
-    [payments, windowKey]
-  )
-  const filteredRefunds = useMemo(
-    () => refunds.filter((row) => withinWindow(row.requestedAt, windowKey)),
-    [refunds, windowKey]
-  )
-
-  const orderCount = filteredOrders.length
-  const grossRevenue = filteredPayments.reduce((sum, row) => sum + Number(row.amount), 0)
-  const refundedAmount = filteredRefunds
-    .filter((row) => row.status === 'processed')
-    .reduce((sum, row) => sum + Number(row.amount), 0)
-  const netRevenue = grossRevenue - refundedAmount
-  const aov = orderCount === 0 ? 0 : filteredOrders.reduce((sum, order) => sum + Number(order.totalAmount), 0) / orderCount
-
-  const completed = filteredOrders.filter((order) => COMPLETED_STATUSES.has(order.status)).length
-  const failed = filteredOrders.filter((order) => FAILED_STATUSES.has(order.status)).length
-  const finalized = completed + failed
-  const onTimePct = finalized === 0 ? null : (completed / finalized) * 100
-
-  const topServices = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const order of filteredOrders) {
-      for (const item of order.items) {
-        counts.set(item.serviceCategoryName, (counts.get(item.serviceCategoryName) ?? 0) + item.quantity)
-      }
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load report')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
     }
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
-  }, [filteredOrders])
-
-  const collectorLeaderboard = useMemo(() => {
-    const totals = new Map<string, { name: string; total: number; count: number }>()
-    for (const row of filteredPayments) {
-      const key = row.collectedBy ?? 'unknown'
-      const name = row.collectedByName ?? 'Unknown'
-      const existing = totals.get(key) ?? { name, total: 0, count: 0 }
-      existing.total += Number(row.amount)
-      existing.count += 1
-      totals.set(key, existing)
-    }
-    return [...totals.values()].sort((a, b) => b.total - a.total).slice(0, 5)
-  }, [filteredPayments])
+  }, [token, days])
 
   return (
     <RequireAuth roles={['admin']}>
       <div className="mb-4 inline-flex flex-wrap rounded-lg border border-ironman-navy-100 bg-white p-1 text-sm shadow-soft">
-        {(['7', '30', '90', 'all'] as WindowKey[]).map((key) => (
+        {WINDOW_OPTIONS.map((opt) => (
           <button
-            key={key}
+            key={opt.key}
             type="button"
-            onClick={() => setWindowKey(key)}
+            onClick={() => setWindowKey(opt.key)}
             className={`rounded-md px-3 py-1.5 font-semibold transition ${
-              windowKey === key ? 'bg-ironman-red text-white' : 'text-ironman-navy hover:bg-ironman-navy-50'
+              windowKey === opt.key ? 'bg-ironman-red text-white' : 'text-ironman-navy hover:bg-ironman-navy-50'
             }`}
           >
-            {WINDOW_LABEL[key]}
+            {opt.label}
           </button>
         ))}
       </div>
 
-      {loading ? <p className="text-sm text-gray-500">Loading…</p> : null}
+      {loading && !data ? <p className="text-sm text-gray-500">Loading report…</p> : null}
+      {error ? (
+        <p className="mb-4 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p>
+      ) : null}
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard label="Orders" value={String(orderCount)} icon="ListChecks" tone="red" />
-        <MetricCard label="Gross revenue" value={formatBdt(grossRevenue)} icon="WalletCards" tone="navy" />
-        <MetricCard label="Refunded" value={formatBdt(refundedAmount)} icon="WalletCards" />
-        <MetricCard label="Net revenue" value={formatBdt(netRevenue)} icon="PackageCheck" tone="navy" />
-      </div>
+      {data ? (
+        <>
+          <div className="grid gap-4 md:grid-cols-4">
+            <MetricCard label="Orders" value={String(data.orderCount)} icon="ListChecks" tone="red" />
+            <MetricCard label="Gross revenue" value={formatBdt(Number(data.grossRevenue))} icon="WalletCards" tone="navy" />
+            <MetricCard label="Refunded" value={formatBdt(Number(data.refundedAmount))} icon="WalletCards" />
+            <MetricCard label="Net revenue" value={formatBdt(Number(data.netRevenue))} icon="PackageCheck" tone="navy" />
+          </div>
 
-      <div className="mt-4 grid gap-4 md:grid-cols-3">
-        <MetricCard label="Average order value" value={formatBdt(Math.round(aov))} icon="WalletCards" />
-        <MetricCard
-          label="Delivery success rate"
-          value={onTimePct == null ? '—' : `${onTimePct.toFixed(1)}%`}
-          icon="Truck"
-          tone={onTimePct != null && onTimePct >= 95 ? 'navy' : 'red'}
-        />
-        <MetricCard label="Refund tickets" value={String(filteredRefunds.length)} icon="AlertOctagon" />
-      </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <MetricCard
+              label="Average order value"
+              value={formatBdt(Math.round(Number(data.averageOrderValue)))}
+              icon="WalletCards"
+            />
+            <MetricCard
+              label="Delivery success rate"
+              value={data.deliverySuccessPct == null ? '—' : `${data.deliverySuccessPct.toFixed(1)}%`}
+              icon="Truck"
+              tone={data.deliverySuccessPct != null && data.deliverySuccessPct >= 95 ? 'navy' : 'red'}
+            />
+            <MetricCard label="Failed orders" value={String(data.failedCount)} icon="AlertOctagon" />
+          </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        <section className="rounded-lg border border-ironman-navy-100 bg-white p-5 shadow-soft">
-          <h3 className="text-lg font-bold text-ironman-navy">Top services</h3>
-          {topServices.length === 0 ? (
-            <p className="mt-3 text-sm text-gray-500">No items yet.</p>
-          ) : (
-            <ol className="mt-3 space-y-2 text-sm">
-              {topServices.map(([name, count], index) => (
-                <li key={name} className="flex items-center justify-between gap-3">
-                  <span className="font-semibold text-ironman-navy">
-                    {index + 1}. {name}
-                  </span>
-                  <span className="text-gray-600">{count} item{count === 1 ? '' : 's'}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
+          <Sparkline daily={data.daily} />
 
-        <section className="rounded-lg border border-ironman-navy-100 bg-white p-5 shadow-soft">
-          <h3 className="text-lg font-bold text-ironman-navy">Cash collectors</h3>
-          {collectorLeaderboard.length === 0 ? (
-            <p className="mt-3 text-sm text-gray-500">No cash collections in window.</p>
-          ) : (
-            <ol className="mt-3 space-y-2 text-sm">
-              {collectorLeaderboard.map((entry, index) => (
-                <li key={entry.name + index} className="flex items-center justify-between gap-3">
-                  <span className="font-semibold text-ironman-navy">
-                    {index + 1}. {entry.name}
-                  </span>
-                  <span className="text-gray-600">
-                    {formatBdt(entry.total)} · {entry.count} tx
-                  </span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
-      </div>
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <section className="rounded-lg border border-ironman-navy-100 bg-white p-5 shadow-soft">
+              <h3 className="text-lg font-bold text-ironman-navy">Top services</h3>
+              {data.topServices.length === 0 ? (
+                <p className="mt-3 text-sm text-gray-500">No items in window.</p>
+              ) : (
+                <ol className="mt-3 space-y-2 text-sm">
+                  {data.topServices.map((row, index) => (
+                    <li key={row.name} className="flex items-center justify-between gap-3">
+                      <span className="font-semibold text-ironman-navy">
+                        {index + 1}. {row.name}
+                      </span>
+                      <span className="text-gray-600">
+                        {row.quantity} item{row.quantity === 1 ? '' : 's'}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+
+            <section className="rounded-lg border border-ironman-navy-100 bg-white p-5 shadow-soft">
+              <h3 className="text-lg font-bold text-ironman-navy">Cash collectors</h3>
+              {data.topCollectors.length === 0 ? (
+                <p className="mt-3 text-sm text-gray-500">No collections in window.</p>
+              ) : (
+                <ol className="mt-3 space-y-2 text-sm">
+                  {data.topCollectors.map((row, index) => (
+                    <li key={row.name + index} className="flex items-center justify-between gap-3">
+                      <span className="font-semibold text-ironman-navy">
+                        {index + 1}. {row.name}
+                      </span>
+                      <span className="text-gray-600">
+                        {formatBdt(Number(row.total))} · {row.count} tx
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+          </div>
+        </>
+      ) : null}
     </RequireAuth>
+  )
+}
+
+/**
+ * Lightweight inline-SVG sparkline for daily revenue + orders. Hand-rolled
+ * instead of pulling in Recharts — keeps the bundle lean and gives precise
+ * control over the small "two-axis on one chart" presentation we want here.
+ */
+function Sparkline({ daily }: { daily: ReportSummaryResponse['daily'] }) {
+  if (daily.length === 0) return null
+  const width = 800
+  const height = 160
+  const padX = 24
+  const padY = 16
+  const innerW = width - padX * 2
+  const innerH = height - padY * 2
+
+  const maxRevenue = Math.max(1, ...daily.map((d) => Number(d.revenue)))
+  const maxOrders = Math.max(1, ...daily.map((d) => d.orders))
+  const stepX = daily.length > 1 ? innerW / (daily.length - 1) : 0
+
+  const revenuePath = daily
+    .map((d, index) => {
+      const x = padX + index * stepX
+      const y = padY + innerH - (Number(d.revenue) / maxRevenue) * innerH
+      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`
+    })
+    .join(' ')
+
+  const ordersBarWidth = Math.max(2, stepX * 0.5)
+
+  return (
+    <section className="mt-6 rounded-lg border border-ironman-navy-100 bg-white p-5 shadow-soft">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-lg font-bold text-ironman-navy">Daily trend</h3>
+        <div className="flex items-center gap-4 text-xs">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2 w-4 rounded-full bg-ironman-red" />
+            Revenue
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2 w-4 rounded-full bg-ironman-navy/30" />
+            Orders
+          </span>
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="mt-3 w-full" role="img" aria-label="Daily revenue and order count">
+        {daily.map((d, index) => {
+          const x = padX + index * stepX - ordersBarWidth / 2
+          const barH = (d.orders / maxOrders) * innerH
+          return (
+            <rect
+              key={d.date}
+              x={x}
+              y={padY + innerH - barH}
+              width={ordersBarWidth}
+              height={barH}
+              fill="rgba(27, 36, 84, 0.18)"
+            >
+              <title>{`${d.date}: ${d.orders} order${d.orders === 1 ? '' : 's'}`}</title>
+            </rect>
+          )
+        })}
+        <path d={revenuePath} fill="none" stroke="#D81B2A" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        {daily.map((d, index) => {
+          const x = padX + index * stepX
+          const y = padY + innerH - (Number(d.revenue) / maxRevenue) * innerH
+          return (
+            <circle key={d.date + '-dot'} cx={x} cy={y} r={2.5} fill="#D81B2A">
+              <title>{`${d.date}: ${formatBdt(Number(d.revenue))}`}</title>
+            </circle>
+          )
+        })}
+      </svg>
+      <p className="mt-2 text-xs text-gray-500">
+        {daily[0].date} → {daily[daily.length - 1].date} · peak {formatBdt(Math.round(maxRevenue))} / day
+      </p>
+    </section>
   )
 }

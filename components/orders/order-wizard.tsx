@@ -17,7 +17,6 @@ import {
   Plus,
   QrCode,
   ShoppingBag,
-  Smartphone,
   X
 } from 'lucide-react'
 import { RequireAuth } from '@/components/auth/require-auth'
@@ -29,11 +28,13 @@ import { formatBdt, isoDate } from '@/lib/utils'
 import type {
   AddressResponse,
   ClothingType,
+  CouponResponse,
   OrderResponse,
   PaymentMethod,
   PricingCell,
   QuoteResponse,
-  ServiceCategory
+  ServiceCategory,
+  SlotAvailabilityResponse
 } from '@/types'
 
 type QuantityMap = Record<string, number>
@@ -53,6 +54,9 @@ type PaymentOption = {
   icon: typeof CreditCard
 }
 
+// Only the payment methods with a working settlement path are exposed. nagad /
+// rocket / card live in the enum but have no settlement endpoint wired yet —
+// surfacing them would create orders no one can ever pay for.
 const paymentOptions: PaymentOption[] = [
   {
     id: 'cod',
@@ -65,45 +69,63 @@ const paymentOptions: PaymentOption[] = [
     title: 'bKash merchant',
     body: 'Scan our merchant QR after pickup and submit the bKash transaction ID from your order page.',
     icon: QrCode
-  },
-  {
-    id: 'nagad',
-    title: 'Nagad',
-    body: 'Send to our Nagad merchant after pickup and submit the reference from your order page.',
-    icon: Smartphone
-  },
-  {
-    id: 'rocket',
-    title: 'Rocket',
-    body: 'Send to our Rocket merchant after pickup and submit the reference from your order page.',
-    icon: Smartphone
-  },
-  {
-    id: 'card',
-    title: 'Card',
-    body: 'Pay with a debit or credit card via our payment partner. You will be redirected after pickup.',
-    icon: CreditCard
   }
 ]
+
+
+const CART_STORAGE_KEY = 'ironman-cart-draft'
+
+type CartDraft = {
+  quantities: QuantityMap
+  notes: Record<string, string>
+  pickupAddressId: string
+  deliveryAddressId: string
+  pickupDate: string
+  deliveryDate: string
+  pickupSlot: string
+  deliverySlot: string
+  paymentMethod: PaymentMethod
+  specialInstructions: string
+  appliedCoupon: string | null
+  sameAsPickup: boolean
+}
+
+function readCartDraft(): Partial<CartDraft> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.localStorage.getItem(CART_STORAGE_KEY)
+    if (!raw) return {}
+    return JSON.parse(raw) as Partial<CartDraft>
+  } catch {
+    return {}
+  }
+}
 
 export function OrderWizard() {
   const router = useRouter()
   const token = useAuthStore((state) => state.accessToken)
+  const draftRef = useRef<Partial<CartDraft>>({})
+  if (typeof window !== 'undefined' && !Object.keys(draftRef.current).length) {
+    draftRef.current = readCartDraft()
+  }
+  const initial = draftRef.current
+
   const [step, setStep] = useState(1)
-  const [quantities, setQuantities] = useState<QuantityMap>({})
-  const [notes, setNotes] = useState<Record<string, string>>({})
+  const [quantities, setQuantities] = useState<QuantityMap>(initial.quantities ?? {})
+  const [notes, setNotes] = useState<Record<string, string>>(initial.notes ?? {})
   const [addresses, setAddresses] = useState<AddressResponse[]>([])
   const [categories, setCategories] = useState<ServiceCategory[]>([])
   const [clothingTypes, setClothingTypes] = useState<ClothingType[]>([])
   const [pricing, setPricing] = useState<PricingCell[]>([])
-  const [pickupAddressId, setPickupAddressId] = useState('')
-  const [deliveryAddressId, setDeliveryAddressId] = useState('')
-  const [pickupDate, setPickupDate] = useState(isoDate(1))
-  const [deliveryDate, setDeliveryDate] = useState(isoDate(3))
-  const [pickupSlot, setPickupSlot] = useState('10:00-12:00')
-  const [deliverySlot, setDeliverySlot] = useState('14:00-18:00')
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod')
-  const [specialInstructions, setSpecialInstructions] = useState('')
+  const [pickupAddressId, setPickupAddressId] = useState(initial.pickupAddressId ?? '')
+  const [deliveryAddressId, setDeliveryAddressId] = useState(initial.deliveryAddressId ?? '')
+  const [pickupDate, setPickupDate] = useState(initial.pickupDate ?? isoDate(1))
+  const [deliveryDate, setDeliveryDate] = useState(initial.deliveryDate ?? isoDate(3))
+  const [pickupSlot, setPickupSlot] = useState(initial.pickupSlot ?? '10:00-12:00')
+  const [deliverySlot, setDeliverySlot] = useState(initial.deliverySlot ?? '14:00-18:00')
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(initial.paymentMethod ?? 'cod')
+  const [specialInstructions, setSpecialInstructions] = useState(initial.specialInstructions ?? '')
+  const [sameAsPickup, setSameAsPickup] = useState<boolean>(initial.sameAsPickup ?? true)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -124,11 +146,68 @@ export function OrderWizard() {
 
   // Coupon & quote state
   const [couponInput, setCouponInput] = useState('')
-  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null)
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(initial.appliedCoupon ?? null)
   const [quote, setQuote] = useState<QuoteResponse | null>(null)
   const [quoteLoading, setQuoteLoading] = useState(false)
   const [quoteError, setQuoteError] = useState<string | null>(null)
   const quoteSeq = useRef(0)
+
+  // Server-driven slot capacity. Each step-4 date change refetches; we never
+  // show a slot that's full and we surface remaining capacity to the user.
+  const [pickupSlots, setPickupSlots] = useState<SlotAvailabilityResponse | null>(null)
+  const [deliverySlots, setDeliverySlots] = useState<SlotAvailabilityResponse | null>(null)
+  const [slotsError, setSlotsError] = useState<string | null>(null)
+
+  // Coupons available for discovery — admins curate descriptions; only
+  // discoverable ones come back. We do not auto-apply any of them.
+  const [availableCoupons, setAvailableCoupons] = useState<CouponResponse[]>([])
+  const [couponsExpanded, setCouponsExpanded] = useState(false)
+
+  // Persist the in-progress cart to localStorage so a refresh doesn't kill the
+  // funnel. Server-side validation still runs at place-order time, so a stale
+  // draft can only ever be a friendly inconvenience, never a correctness issue.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const draft: CartDraft = {
+      quantities,
+      notes,
+      pickupAddressId,
+      deliveryAddressId,
+      pickupDate,
+      deliveryDate,
+      pickupSlot,
+      deliverySlot,
+      paymentMethod,
+      specialInstructions,
+      appliedCoupon,
+      sameAsPickup
+    }
+    try {
+      window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(draft))
+    } catch {
+      // Quota exceeded or private mode — degrade silently.
+    }
+  }, [
+    quantities,
+    notes,
+    pickupAddressId,
+    deliveryAddressId,
+    pickupDate,
+    deliveryDate,
+    pickupSlot,
+    deliverySlot,
+    paymentMethod,
+    specialInstructions,
+    appliedCoupon,
+    sameAsPickup
+  ])
+
+  // Keep delivery == pickup whenever the toggle is on.
+  useEffect(() => {
+    if (sameAsPickup && pickupAddressId && deliveryAddressId !== pickupAddressId) {
+      setDeliveryAddressId(pickupAddressId)
+    }
+  }, [sameAsPickup, pickupAddressId, deliveryAddressId])
 
   useEffect(() => {
     if (!token) return
@@ -156,6 +235,72 @@ export function OrderWizard() {
 
     void load()
   }, [token])
+
+  // Curated coupons the customer can browse. One-shot at mount — cheap and
+  // doesn't change inside a single ordering session.
+  useEffect(() => {
+    if (!token) return
+    apiFetch<CouponResponse[]>('/coupons/active', { token })
+      .then(setAvailableCoupons)
+      .catch(() => setAvailableCoupons([]))
+  }, [token])
+
+  // Re-query pickup-slot capacity whenever the pickup date changes.
+  useEffect(() => {
+    if (!token || !pickupDate) {
+      setPickupSlots(null)
+      return
+    }
+    let cancelled = false
+    apiFetch<SlotAvailabilityResponse>(`/services/slots?date=${pickupDate}`, { token })
+      .then((res) => {
+        if (cancelled) return
+        setPickupSlots(res)
+        setSlotsError(null)
+        // If the currently-selected slot is full or no longer offered, push
+        // the user to the first available alternative.
+        const offered = res.pickup
+        const current = offered.find((row) => row.slot === pickupSlot)
+        if (!current || current.full) {
+          const fallback = offered.find((row) => !row.full)
+          if (fallback) setPickupSlot(fallback.slot)
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setSlotsError(err instanceof Error ? err.message : 'Could not load slots')
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, pickupDate])
+
+  useEffect(() => {
+    if (!token || !deliveryDate) {
+      setDeliverySlots(null)
+      return
+    }
+    let cancelled = false
+    apiFetch<SlotAvailabilityResponse>(`/services/slots?date=${deliveryDate}`, { token })
+      .then((res) => {
+        if (cancelled) return
+        setDeliverySlots(res)
+        setSlotsError(null)
+        const offered = res.delivery
+        const current = offered.find((row) => row.slot === deliverySlot)
+        if (!current || current.full) {
+          const fallback = offered.find((row) => !row.full)
+          if (fallback) setDeliverySlot(fallback.slot)
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setSlotsError(err instanceof Error ? err.message : 'Could not load slots')
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, deliveryDate])
 
   const decoratedClothingTypes = useMemo(() => decorateClothingTypes(clothingTypes), [clothingTypes])
   const selectedItems = useMemo(() => {
@@ -402,6 +547,13 @@ export function OrderWizard() {
           }))
         }
       })
+      if (typeof window !== 'undefined') {
+        try {
+          window.localStorage.removeItem(CART_STORAGE_KEY)
+        } catch {
+          /* ignore */
+        }
+      }
       router.push(`/customer/orders/${order.id}`)
     } catch (err) {
       const msg = err instanceof ApiError ? err.detail || err.message : err instanceof Error ? err.message : 'Could not place order'
@@ -476,13 +628,37 @@ export function OrderWizard() {
           ) : null}
 
           {step === 2 ? (
-            <AddressStep
-              title="Delivery address"
-              selectedId={deliveryAddressId}
-              addresses={addresses}
-              onSelect={setDeliveryAddressId}
-              onAdd={openAddressForm}
-            />
+            <div className="space-y-4">
+              <label className="flex items-center gap-2 rounded-lg border border-ironman-navy-100 bg-ironman-navy-50 px-3 py-2 text-sm font-semibold text-ironman-navy">
+                <input
+                  type="checkbox"
+                  checked={sameAsPickup}
+                  onChange={(event) => {
+                    const next = event.target.checked
+                    setSameAsPickup(next)
+                    if (next && pickupAddressId) {
+                      setDeliveryAddressId(pickupAddressId)
+                    }
+                  }}
+                  className="h-4 w-4 accent-ironman-red"
+                />
+                Deliver to my pickup address
+              </label>
+              {sameAsPickup ? (
+                <div className="rounded-lg border border-dashed border-ironman-navy-100 bg-white p-4 text-sm text-gray-600">
+                  Delivery will go back to <strong className="text-ironman-navy">{pickupAddress ? pickupAddress.label : 'your pickup address'}</strong>.
+                  Uncheck above to send to a different address.
+                </div>
+              ) : (
+                <AddressStep
+                  title="Delivery address"
+                  selectedId={deliveryAddressId}
+                  addresses={addresses}
+                  onSelect={setDeliveryAddressId}
+                  onAdd={openAddressForm}
+                />
+              )}
+            </div>
           ) : null}
 
           {step === 3 ? (
@@ -534,10 +710,22 @@ export function OrderWizard() {
               </label>
               <label>
                 <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Pickup slot</span>
-                <select className="tap-target mt-2 w-full rounded-lg border border-ironman-navy-100 bg-ironman-navy-50 px-3 py-2 focus-ring" value={pickupSlot} onChange={(event) => setPickupSlot(event.target.value)}>
-                  <option>10:00-12:00</option>
-                  <option>14:00-18:00</option>
-                  <option>18:00-20:00</option>
+                <select
+                  className="tap-target mt-2 w-full rounded-lg border border-ironman-navy-100 bg-ironman-navy-50 px-3 py-2 focus-ring"
+                  value={pickupSlot}
+                  onChange={(event) => setPickupSlot(event.target.value)}
+                  disabled={!pickupSlots}
+                >
+                  {(pickupSlots?.pickup ?? []).length === 0 ? (
+                    <option value="">Loading slots…</option>
+                  ) : (
+                    pickupSlots!.pickup.map((row) => (
+                      <option key={row.slot} value={row.slot} disabled={row.full}>
+                        {row.slot}
+                        {row.full ? ' — Full' : row.remaining <= 3 ? ` — Only ${row.remaining} left` : ''}
+                      </option>
+                    ))
+                  )}
                 </select>
               </label>
               <label>
@@ -546,12 +734,29 @@ export function OrderWizard() {
               </label>
               <label>
                 <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Delivery slot</span>
-                <select className="tap-target mt-2 w-full rounded-lg border border-ironman-navy-100 bg-ironman-navy-50 px-3 py-2 focus-ring" value={deliverySlot} onChange={(event) => setDeliverySlot(event.target.value)}>
-                  <option>10:00-12:00</option>
-                  <option>14:00-18:00</option>
-                  <option>18:00-20:00</option>
+                <select
+                  className="tap-target mt-2 w-full rounded-lg border border-ironman-navy-100 bg-ironman-navy-50 px-3 py-2 focus-ring"
+                  value={deliverySlot}
+                  onChange={(event) => setDeliverySlot(event.target.value)}
+                  disabled={!deliverySlots}
+                >
+                  {(deliverySlots?.delivery ?? []).length === 0 ? (
+                    <option value="">Loading slots…</option>
+                  ) : (
+                    deliverySlots!.delivery.map((row) => (
+                      <option key={row.slot} value={row.slot} disabled={row.full}>
+                        {row.slot}
+                        {row.full ? ' — Full' : row.remaining <= 3 ? ` — Only ${row.remaining} left` : ''}
+                      </option>
+                    ))
+                  )}
                 </select>
               </label>
+              {slotsError ? (
+                <p className="md:col-span-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                  {slotsError} — using cached options.
+                </p>
+              ) : null}
               <label className="md:col-span-2">
                 <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Special instructions</span>
                 <textarea className="mt-2 min-h-24 w-full rounded-lg border border-ironman-navy-100 bg-ironman-navy-50 px-3 py-2 focus-ring" value={specialInstructions} onChange={(event) => setSpecialInstructions(event.target.value)} />
@@ -668,22 +873,72 @@ export function OrderWizard() {
                     </button>
                   </div>
                 ) : (
-                  <div className="mt-2 flex gap-2">
-                    <input
-                      className="tap-target min-w-0 flex-1 rounded-md border border-ironman-navy-100 bg-white px-2 py-1.5 text-sm uppercase focus-ring"
-                      placeholder="Code"
-                      value={couponInput}
-                      onChange={(event) => setCouponInput(event.target.value)}
-                    />
-                    <button
-                      type="button"
-                      onClick={applyCoupon}
-                      disabled={!couponInput.trim()}
-                      className="tap-target rounded-md bg-ironman-navy px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-                    >
-                      Apply
-                    </button>
-                  </div>
+                  <>
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        className="tap-target min-w-0 flex-1 rounded-md border border-ironman-navy-100 bg-white px-2 py-1.5 text-sm uppercase focus-ring"
+                        placeholder="Code"
+                        value={couponInput}
+                        onChange={(event) => setCouponInput(event.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={applyCoupon}
+                        disabled={!couponInput.trim()}
+                        className="tap-target rounded-md bg-ironman-navy px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                    {availableCoupons.length > 0 ? (
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          onClick={() => setCouponsExpanded((v) => !v)}
+                          className="focus-ring inline-flex items-center gap-1 text-xs font-semibold text-ironman-red hover:underline"
+                        >
+                          {couponsExpanded
+                            ? 'Hide available offers'
+                            : `Show ${availableCoupons.length} available offer${availableCoupons.length === 1 ? '' : 's'}`}
+                        </button>
+                        {couponsExpanded ? (
+                          <ul className="mt-2 space-y-1.5">
+                            {availableCoupons.map((coupon) => (
+                              <li
+                                key={coupon.id}
+                                className="flex items-start justify-between gap-2 rounded-md border border-ironman-navy-100 bg-white p-2 text-xs"
+                              >
+                                <div>
+                                  <p className="font-bold text-ironman-navy">{coupon.code}</p>
+                                  {coupon.description ? (
+                                    <p className="text-gray-600">{coupon.description}</p>
+                                  ) : null}
+                                  <p className="mt-0.5 text-[10px] uppercase tracking-wide text-gray-400">
+                                    {coupon.discountType === 'percent'
+                                      ? `${coupon.discountValue}% off`
+                                      : `${formatBdt(Number(coupon.discountValue))} off`}
+                                    {coupon.minOrderAmount != null && Number(coupon.minOrderAmount) > 0
+                                      ? ` · min ${formatBdt(Number(coupon.minOrderAmount))}`
+                                      : ''}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAppliedCoupon(coupon.code)
+                                    setCouponsExpanded(false)
+                                  }}
+                                  className="tap-target rounded-md bg-ironman-red px-2 py-1 text-[11px] font-semibold text-white"
+                                >
+                                  Apply
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </>
                 )}
               </div>
             </div>

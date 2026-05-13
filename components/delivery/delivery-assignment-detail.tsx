@@ -6,6 +6,7 @@ import { RequireAuth } from '@/components/auth/require-auth'
 import { AssignmentCard } from '@/components/tasks/assignment-card'
 import { CompleteAssignmentPanel } from '@/components/tasks/complete-assignment-panel'
 import { DeliveryCodReceivePanel } from '@/components/delivery/delivery-cod-receive-panel'
+import { DeliveryFailPanel } from '@/components/delivery/delivery-fail-panel'
 import { DeliveryReconcilePanel } from '@/components/delivery/delivery-reconcile-panel'
 import { apiFetch } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
@@ -89,6 +90,17 @@ export function DeliveryAssignmentDetail({ id }: DeliveryAssignmentDetailProps) 
 
             {assignment.assignmentType === 'delivery' ? (
               <DeliveryCodReceivePanel assignment={assignment} token={token} onConfirmed={load} />
+            ) : null}
+
+            {assignment.assignmentType === 'delivery' ? (
+              <DeliveryFailPanel
+                assignment={assignment}
+                token={token}
+                onFailed={() => {
+                  setMessage(`${assignment.orderNumber} marked as failed delivery`)
+                  void load()
+                }}
+              />
             ) : null}
 
             <div id="complete-assignment-panel">

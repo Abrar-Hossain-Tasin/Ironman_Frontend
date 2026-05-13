@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { RequireAuth } from '@/components/auth/require-auth'
+import { DeliveryEarningsCard } from '@/components/delivery/delivery-earnings-card'
 import { AssignmentCard } from '@/components/tasks/assignment-card'
 import { apiFetch } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
@@ -108,8 +109,18 @@ export function DeliveryDashboard() {
     await load()
   }
 
+  // Bumped after an assignment action completes so the earnings card re-fetches.
+  // The action itself doesn't change earnings — but recording cash does, and
+  // both happen on the same dashboard, so refreshing on any state change keeps
+  // the number honest with minimal complexity.
+  const earningsRefreshKey = assignments.length + (message ? 1 : 0)
+
   return (
     <RequireAuth roles={['delivery_man']}>
+      <div className="mb-4">
+        <DeliveryEarningsCard token={token} refreshKey={earningsRefreshKey} />
+      </div>
+
       {isTracking && (
         <div className="mb-4 flex items-center gap-2 text-xs font-medium text-green-600">
           <span className="relative flex h-2 w-2">
