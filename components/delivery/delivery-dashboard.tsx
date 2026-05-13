@@ -1,7 +1,7 @@
-
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { RequireAuth } from '@/components/auth/require-auth'
 import { AssignmentCard } from '@/components/tasks/assignment-card'
 import { apiFetch } from '@/lib/api'
@@ -9,6 +9,7 @@ import { useAuthStore } from '@/lib/auth-store'
 import type { Assignment } from '@/types'
 
 export function DeliveryDashboard() {
+  const router = useRouter()
   const token = useAuthStore((state) => state.accessToken)
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [message, setMessage] = useState<string | null>(null)
@@ -23,6 +24,7 @@ export function DeliveryDashboard() {
 
   useEffect(() => {
     void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
   useEffect(() => {
@@ -96,12 +98,11 @@ export function DeliveryDashboard() {
     }
   }, [assignments, token])
 
-  async function action(assignment: Assignment, path: string) {
+  async function action(assignment: Assignment, path: 'accept' | 'start') {
     if (!token) return
     await apiFetch(`/delivery/assignments/${assignment.id}/${path}`, {
       method: 'PUT',
-      token,
-      body: path === 'complete' ? { notes: 'Completed from delivery dashboard' } : undefined
+      token
     })
     setMessage(`${assignment.orderNumber} ${path}`)
     await load()
@@ -110,10 +111,10 @@ export function DeliveryDashboard() {
   return (
     <RequireAuth roles={['delivery_man']}>
       {isTracking && (
-        <div className="mb-4 flex items-center gap-2 text-xs text-green-600 font-medium">
+        <div className="mb-4 flex items-center gap-2 text-xs font-medium text-green-600">
           <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75"></span>
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500"></span>
           </span>
           {trackingMessage ?? 'Live GPS tracking active'}
         </div>
@@ -135,7 +136,7 @@ export function DeliveryDashboard() {
             assignment={assignment}
             onAccept={(item) => action(item, 'accept')}
             onStart={(item) => action(item, 'start')}
-            onComplete={(item) => action(item, 'complete')}
+            onComplete={(item) => router.push(`/delivery/assignments/${item.id}`)}
           />
         ))}
       </div>

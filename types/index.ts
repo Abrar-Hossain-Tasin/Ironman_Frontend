@@ -238,6 +238,7 @@ export type Assignment = {
   preferredTime?: string
   amountDue?: number
   notes?: string | null
+  photoUrls?: string[]
 }
 
 // ── Payments & refunds ───────────────────────────────────────────────────

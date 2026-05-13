@@ -1,4 +1,5 @@
 import {
+  AlertOctagon,
   BriefcaseBusiness,
   Check,
   Circle,
@@ -12,6 +13,7 @@ import {
   PanelTop,
   Rows3,
   Search,
+  Send,
   Shirt,
   Sparkle,
   Sparkles,
@@ -24,6 +26,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 
 const icons: Record<string, LucideIcon> = {
+  AlertOctagon,
   BriefcaseBusiness,
   Check,
   Circle,
@@ -37,6 +40,7 @@ const icons: Record<string, LucideIcon> = {
   PanelTop,
   Rows3,
   Search,
+  Send,
   Shirt,
   Sparkle,
   Sparkles,

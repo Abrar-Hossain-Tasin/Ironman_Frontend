@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { AlertOctagon, Loader2, Plus } from 'lucide-react'
 import { apiFetch, ApiError } from '@/lib/api'
+import { PhotoEvidenceField } from '@/components/tasks/photo-evidence-field'
 import { statusLabel } from '@/lib/utils'
 import type { IssueResponse, IssueType, OrderResponse, OrderStatus } from '@/types'
 
@@ -31,7 +32,7 @@ export function OrderIssuesPanel({ order, token }: OrderIssuesPanelProps) {
   const [open, setOpen] = useState(false)
   const [type, setType] = useState<IssueType>('damaged')
   const [description, setDescription] = useState('')
-  const [photoUrls, setPhotoUrls] = useState('')
+  const [photoUrls, setPhotoUrls] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -64,19 +65,18 @@ export function OrderIssuesPanel({ order, token }: OrderIssuesPanelProps) {
     setSubmitting(true)
     setError(null)
     try {
-      const photos = photoUrls.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean)
       const created = await apiFetch<IssueResponse>(`/orders/${order.id}/issues`, {
         method: 'POST',
         token,
         body: {
           type,
           description: description.trim(),
-          photoUrls: photos
+          photoUrls
         }
       })
       setIssues((current) => [created, ...current])
       setDescription('')
-      setPhotoUrls('')
+      setPhotoUrls([])
       setOpen(false)
     } catch (err) {
       const msg = err instanceof ApiError ? err.detail || err.message : err instanceof Error ? err.message : 'Could not submit issue'
@@ -131,28 +131,17 @@ export function OrderIssuesPanel({ order, token }: OrderIssuesPanelProps) {
             </div>
           </div>
 
-          <label>
-            <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Describe what happened</span>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="mt-1 min-h-24 w-full rounded-lg border border-ironman-navy-100 bg-white px-3 py-2 focus-ring"
-              placeholder="A small tear on the collar; missing 1 shirt; etc."
-            />
-          </label>
-
-          <label>
-            <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Photo URLs (optional, comma-separated)</span>
-            <input
-              value={photoUrls}
-              onChange={(e) => setPhotoUrls(e.target.value)}
-              className="tap-target mt-1 w-full rounded-lg border border-ironman-navy-100 bg-white px-3 py-2 focus-ring"
-              placeholder="https://… , https://…"
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              Photo upload coming soon. For now, paste image links (e.g. from your phone’s cloud gallery).
-            </p>
-          </label>
+          <PhotoEvidenceField
+            notes={description}
+            photoUrls={photoUrls}
+            onNotesChange={setDescription}
+            onPhotoUrlsChange={setPhotoUrls}
+            orderId={order.id}
+            kind="issue"
+            notesLabel="Describe what happened"
+            placeholder="A small tear on the collar; missing 1 shirt; etc."
+            disabled={submitting}
+          />
 
           {error ? <p className="rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p> : null}
 
@@ -194,8 +183,9 @@ export function OrderIssuesPanel({ order, token }: OrderIssuesPanelProps) {
               {issue.photoUrls.length ? (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {issue.photoUrls.map((url) => (
-                    <a key={url} href={url} target="_blank" rel="noreferrer" className="text-xs font-semibold text-ironman-red underline">
-                      Photo
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <a key={url} href={url} target="_blank" rel="noreferrer" className="block h-16 w-16 overflow-hidden rounded-md border border-ironman-navy-100">
+                      <img src={url} alt="evidence" className="h-full w-full object-cover" />
                     </a>
                   ))}
                 </div>

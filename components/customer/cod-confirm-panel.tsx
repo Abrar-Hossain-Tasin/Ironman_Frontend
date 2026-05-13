@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2, HandCoins, Loader2 } from 'lucide-react'
 import { apiFetch, ApiError } from '@/lib/api'
+import { getSupabaseClient } from '@/lib/supabase'
 import type { CodPaymentStatusResponse, OrderResponse } from '@/types'
 
 type CodConfirmPanelProps = {
@@ -26,16 +27,40 @@ export function CodConfirmPanel({ order, token, onConfirmed }: CodConfirmPanelPr
 
   useEffect(() => {
     if (!token || !shouldShow) return
-    let cancelled = false
-    apiFetch<CodPaymentStatusResponse>(`/orders/${order.id}/payment-status`, { token })
-      .then((res) => {
-        if (!cancelled) setStatus(res)
-      })
-      .catch(() => {
+    const signal = { cancelled: false }
+
+    async function fetchStatus() {
+      try {
+        const res = await apiFetch<CodPaymentStatusResponse>(`/orders/${order.id}/payment-status`, { token })
+        if (!signal.cancelled) setStatus(res)
+      } catch {
         // Silent: handshake is optional UI; payment ledger covers truth.
-      })
+      }
+    }
+
+    void fetchStatus()
+
+    // Realtime: re-fetch when the delivery agent confirms in their app so the
+    // customer sees the "Delivery man confirmed" tick without refreshing.
+    const client = getSupabaseClient()
+    type Channel = ReturnType<NonNullable<typeof client>['channel']>
+    let channel: Channel | null = null
+    if (client) {
+      channel = client
+        .channel(`cod-customer-${order.id}`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${order.id}` },
+          () => void fetchStatus()
+        )
+        .subscribe()
+    }
+
     return () => {
-      cancelled = true
+      signal.cancelled = true
+      if (channel && client) {
+        void client.removeChannel(channel)
+      }
     }
   }, [token, order.id, shouldShow])
 

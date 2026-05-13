@@ -1,16 +1,21 @@
 'use client'
 
 import { FormEvent, useEffect, useState } from 'react'
+import { Star } from 'lucide-react'
 import { RequireAuth } from '@/components/auth/require-auth'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { apiFetch } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
-import type { UserRole, UserSummary } from '@/types'
+import type { ReviewResponse, UserRole, UserSummary } from '@/types'
 
 export function AdminStaff() {
   const token = useAuthStore((state) => state.accessToken)
   const [staff, setStaff] = useState<UserSummary[]>([])
   const [message, setMessage] = useState<string | null>(null)
+  const [selected, setSelected] = useState<UserSummary | null>(null)
+  const [reviews, setReviews] = useState<ReviewResponse[]>([])
+  const [rating, setRating] = useState<number | null>(null)
+  const [reviewLoading, setReviewLoading] = useState(false)
 
   async function load() {
     if (!token) return
@@ -19,7 +24,33 @@ export function AdminStaff() {
 
   useEffect(() => {
     void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
+
+  useEffect(() => {
+    if (!token || !selected) {
+      setReviews([])
+      setRating(null)
+      return
+    }
+    let cancelled = false
+    setReviewLoading(true)
+    Promise.all([
+      apiFetch<ReviewResponse[]>(`/admin/staff/${selected.id}/reviews`, { token }),
+      apiFetch<number | null>(`/admin/staff/${selected.id}/rating`, { token }).catch(() => null)
+    ])
+      .then(([list, avg]) => {
+        if (cancelled) return
+        setReviews(list)
+        setRating(avg)
+      })
+      .finally(() => {
+        if (!cancelled) setReviewLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [token, selected])
 
   async function createStaff(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -44,22 +75,78 @@ export function AdminStaff() {
   return (
     <RequireAuth roles={['admin']}>
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-        <div className="grid gap-4 md:grid-cols-2">
-          {staff.map((person) => (
-            <article key={person.id} className="rounded-lg border border-ironman-navy-100 bg-white p-5 shadow-soft">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-bold text-ironman-navy">{person.fullName}</h2>
-                  <p className="mt-1 text-sm text-gray-600">{person.role.replaceAll('_', ' ')}</p>
-                  <p className="mt-1 text-sm text-gray-600">{person.email}</p>
+        <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            {staff.map((person) => (
+              <article key={person.id} className="rounded-lg border border-ironman-navy-100 bg-white p-5 shadow-soft">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-bold text-ironman-navy">{person.fullName}</h2>
+                    <p className="mt-1 text-sm text-gray-600">{person.role.replaceAll('_', ' ')}</p>
+                    <p className="mt-1 text-sm text-gray-600">{person.email}</p>
+                  </div>
+                  <StatusBadge status={person.active ? 'accepted' : 'rejected'} />
                 </div>
-                <StatusBadge status={person.active ? 'accepted' : 'rejected'} />
-              </div>
-            </article>
-          ))}
+                {person.role === 'delivery_man' ? (
+                  <button
+                    type="button"
+                    onClick={() => setSelected((current) => (current?.id === person.id ? null : person))}
+                    className="focus-ring mt-3 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-ironman-red hover:bg-ironman-red-50"
+                  >
+                    <Star className="h-3.5 w-3.5" aria-hidden />
+                    {selected?.id === person.id ? 'Hide reviews' : 'View reviews'}
+                  </button>
+                ) : null}
+              </article>
+            ))}
+          </div>
+
+          {selected ? (
+            <section className="rounded-lg border border-ironman-navy-100 bg-white p-5 shadow-soft">
+              <header className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-bold text-ironman-navy">Reviews — {selected.fullName}</h3>
+                  <p className="text-xs text-gray-500">{reviews.length} review{reviews.length === 1 ? '' : 's'}</p>
+                </div>
+                {rating != null ? (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-3 py-1 text-sm font-bold text-amber-800">
+                    <Star className="h-4 w-4" aria-hidden />
+                    {rating.toFixed(2)} / 5
+                  </span>
+                ) : null}
+              </header>
+
+              {reviewLoading ? (
+                <p className="mt-3 text-sm text-gray-500">Loading reviews…</p>
+              ) : reviews.length === 0 ? (
+                <p className="mt-3 text-sm text-gray-500">No reviews yet.</p>
+              ) : (
+                <ul className="mt-4 space-y-3">
+                  {reviews.map((review) => (
+                    <li key={review.id} className="rounded-lg border border-ironman-navy-100 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-semibold text-ironman-navy">{review.customerName}</p>
+                        <span className="text-xs text-gray-500">{new Date(review.createdAt).toLocaleString()}</span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-gray-600">
+                        <span className="inline-flex items-center gap-1 font-semibold text-amber-700">
+                          <Star className="h-4 w-4" aria-hidden />
+                          {review.overallRating} / 5
+                        </span>
+                        {review.serviceRating ? <span>Service {review.serviceRating}/5</span> : null}
+                        {review.deliveryRating ? <span>Delivery {review.deliveryRating}/5</span> : null}
+                      </div>
+                      {review.comment ? <p className="mt-2 text-sm text-gray-700">{review.comment}</p> : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          ) : null}
         </div>
+
         <form className="h-fit rounded-lg border border-ironman-navy-100 bg-white p-5 shadow-soft" onSubmit={createStaff}>
-          <h2 className="text-xl font-bold text-ironman-navy">Create Staff</h2>
+          <h2 className="text-xl font-bold text-ironman-navy">Create staff</h2>
           <div className="mt-4 space-y-3">
             <input name="fullName" className="tap-target w-full rounded-lg border border-ironman-navy-100 bg-ironman-navy-50 px-3 py-2 focus-ring" placeholder="Full name" required />
             <input name="email" className="tap-target w-full rounded-lg border border-ironman-navy-100 bg-ironman-navy-50 px-3 py-2 focus-ring" placeholder="Email" type="email" required />

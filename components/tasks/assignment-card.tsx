@@ -9,20 +9,48 @@ type AssignmentCardProps = {
   onAccept?: (assignment: Assignment) => void
   onStart?: (assignment: Assignment) => void
   onComplete?: (assignment: Assignment) => void
+  selectable?: boolean
+  selected?: boolean
+  onToggleSelect?: (assignment: Assignment) => void
 }
 
-export function AssignmentCard({ assignment, onAccept, onStart, onComplete }: AssignmentCardProps) {
+export function AssignmentCard({
+  assignment,
+  onAccept,
+  onStart,
+  onComplete,
+  selectable,
+  selected,
+  onToggleSelect
+}: AssignmentCardProps) {
   const canAccept = assignment.status === 'pending'
   const canStart = assignment.status === 'pending' || assignment.status === 'accepted'
   const canComplete = assignment.status === 'accepted' || assignment.status === 'in_progress'
 
   return (
-    <article className="rounded-lg border border-ironman-navy-100 bg-white p-5 shadow-soft">
+    <article
+      className={`rounded-lg border bg-white p-5 shadow-soft transition ${
+        selected ? 'border-ironman-red ring-2 ring-ironman-red/30' : 'border-ironman-navy-100'
+      }`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-ironman-red">{statusLabel(assignment.assignmentType as never)}</p>
-          <h2 className="mt-1 text-lg font-bold text-ironman-navy">{assignment.orderNumber}</h2>
-          <p className="mt-1 text-sm text-gray-600">{assignmentCustomerName(assignment)}</p>
+        <div className="flex items-start gap-3">
+          {selectable ? (
+            <label className="mt-1 inline-flex cursor-pointer items-center">
+              <input
+                type="checkbox"
+                checked={!!selected}
+                onChange={() => onToggleSelect?.(assignment)}
+                aria-label={`Select ${assignment.orderNumber}`}
+                className="h-5 w-5 rounded border-ironman-navy-100 text-ironman-red focus-ring"
+              />
+            </label>
+          ) : null}
+          <div>
+            <p className="text-sm font-semibold text-ironman-red">{statusLabel(assignment.assignmentType as never)}</p>
+            <h2 className="mt-1 text-lg font-bold text-ironman-navy">{assignment.orderNumber}</h2>
+            <p className="mt-1 text-sm text-gray-600">{assignmentCustomerName(assignment)}</p>
+          </div>
         </div>
         <StatusBadge status={assignment.status} />
       </div>
