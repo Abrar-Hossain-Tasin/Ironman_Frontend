@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, useState, useId } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Mail, Lock, User, Phone, MapPin } from 'lucide-react'
@@ -65,7 +66,11 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
       if (mode === 'register' && address) {
         await apiFetch('/users/me/addresses', { method: 'POST', token: auth.accessToken, body: { label: 'Home', addressLine1: address, area: 'Dhaka', city: 'Dhaka', defaultAddress: true } })
       }
-      router.push(roleHome(auth.user.role))
+      if (mode === 'register') {
+        router.push(`/verify-email?email=${encodeURIComponent(auth.user.email)}`)
+      } else {
+        router.push(roleHome(auth.user.role))
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Authentication failed')
     } finally {
@@ -86,6 +91,17 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
 
       <FloatingInput name="email" label="Email Address" type="email" icon={Mail} required delay={0.2} shake={!!error} />
       <FloatingInput name="password" label="Password" type="password" icon={Lock} required minLength={8} delay={0.25} shake={!!error} />
+
+      {isLogin && (
+        <div className="flex justify-end pt-1">
+          <Link
+            href="/forgot-password"
+            className="text-xs font-bold text-ironman-red underline-offset-4 hover:underline"
+          >
+            Forgot password?
+          </Link>
+        </div>
+      )}
 
       {error && (
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs font-bold text-ironman-red px-2">{error}</motion.p>

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { LogoutButton } from '@/components/auth/logout-button'
 import { Icon } from '@/components/ui/icon'
+import { NotificationBell } from '@/components/ui/notification-bell'
 import { cn } from '@/lib/utils'
 
 type PortalShellProps = {
@@ -39,7 +40,10 @@ export function PortalShell({ title, subtitle, nav, children }: PortalShellProps
               <p className="text-xs font-medium uppercase tracking-wide text-ironman-red">{subtitle}</p>
               <h1 className="text-2xl font-bold text-ironman-navy">{title}</h1>
             </div>
-            <LogoutButton />
+            <div className="flex items-center gap-3">
+              <NotificationBell />
+              <LogoutButton />
+            </div>
           </div>
         </header>
         <main className="container-page py-6">{children}</main>

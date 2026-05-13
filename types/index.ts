@@ -1,3 +1,6 @@
+// Auto-aligned with backend DTOs in com.ironman.dto.*.
+// When the backend evolves, mirror the change here in the same PR.
+
 export type UserRole =
   | 'admin'
   | 'customer'
@@ -22,14 +25,26 @@ export type OrderStatus =
   | 'delivery_assigned'
   | 'out_for_delivery'
   | 'delivered'
+  | 'delivery_failed'
+  | 'returned'
+  | 'disputed'
   | 'cancelled'
 
 export type AssignmentStatus = 'pending' | 'accepted' | 'in_progress' | 'completed' | 'rejected'
 export type AssignmentType = 'pickup' | 'delivery' | 'wash' | 'iron' | 'dry_clean'
+
 export type PaymentStatus = 'pending' | 'paid' | 'partial'
 export type PaymentType = 'cod_pickup' | 'cod_delivery' | 'bkash_merchant' | 'advance' | 'partial'
-export type PaymentMethod = 'cod' | 'online'
+export type PaymentMethod = 'cod' | 'online' | 'bkash' | 'nagad' | 'rocket' | 'card'
 
+export type CodConfirmationStatus = 'pending' | 'customer_confirmed' | 'delivery_confirmed'
+
+export type DiscountType = 'percent' | 'fixed'
+export type IssueType = 'damaged' | 'missing' | 'wrong_item' | 'late' | 'other'
+export type IssueStatus = 'open' | 'in_review' | 'resolved' | 'rejected'
+export type RefundStatus = 'pending' | 'processed' | 'failed'
+
+// ── Auth ─────────────────────────────────────────────────────────────────
 export type UserSummary = {
   id: string
   fullName: string
@@ -38,6 +53,7 @@ export type UserSummary = {
   role: UserRole
   profilePictureUrl?: string | null
   active: boolean
+  emailVerified?: boolean
 }
 
 export type AuthResponse = {
@@ -47,6 +63,7 @@ export type AuthResponse = {
   user: UserSummary
 }
 
+// ── Addresses & catalog ──────────────────────────────────────────────────
 export type AddressResponse = {
   id: string
   label: string
@@ -79,17 +96,18 @@ export type ClothingType = {
 }
 
 export type PricingCell = {
-  id: string; // The UUID from PricingResponse
-  serviceCategoryId: string;
-  serviceCategoryName: string;
-  clothingTypeId: string;
-  clothingTypeName: string;
-  price: number;
-  currency: string;
-  effectiveFrom: string; // LocalDate translates to string in JSON
-  current?: boolean; // Optional, useful for filtering
+  id: string
+  serviceCategoryId: string
+  serviceCategoryName: string
+  clothingTypeId: string
+  clothingTypeName: string
+  price: number
+  currency: string
+  effectiveFrom: string
+  current?: boolean
 }
 
+// ── Tracking & live location ─────────────────────────────────────────────
 export type TrackingEvent = {
   id: string
   orderId?: string
@@ -98,6 +116,7 @@ export type TrackingEvent = {
   description: string
   updatedBy?: string | null
   updatedByName?: string | null
+  actorRole?: UserRole | null
   locationLat?: number | null
   locationLng?: number | null
   timestamp: string
@@ -114,6 +133,7 @@ export type DeliveryLocation = {
   updatedAt: string
 }
 
+// ── Orders ───────────────────────────────────────────────────────────────
 export type OrderItemResponse = {
   id: string
   clothingTypeId: string
@@ -121,6 +141,7 @@ export type OrderItemResponse = {
   serviceCategoryId: string
   serviceCategoryName: string
   quantity: number
+  actualQuantity?: number | null
   unitPrice: number
   subtotal: number
   notes?: string | null
@@ -140,8 +161,13 @@ export type OrderResponse = {
   status: OrderStatus
   paymentMethod: PaymentMethod
   paymentStatus: PaymentStatus
+  codConfirmationStatus?: CodConfirmationStatus | null
+  customerConfirmedAt?: string | null
+  deliveryConfirmedAt?: string | null
   totalAmount: number
   paidAmount: number
+  discountAmount?: number | null
+  couponCode?: string | null
   items: OrderItemResponse[]
   createdAt: string
   updatedAt: string
@@ -158,6 +184,45 @@ export type OrderSummary = {
   customerName: string
 }
 
+export type OrderSearchResponse = {
+  content: OrderResponse[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+}
+
+// ── Quote (pre-order pricing) ────────────────────────────────────────────
+export type QuoteLineRequest = {
+  clothingTypeId: string
+  serviceCategoryId: string
+  quantity: number
+}
+
+export type QuoteRequest = {
+  items: QuoteLineRequest[]
+  couponCode?: string | null
+}
+
+export type QuoteLine = {
+  clothingTypeId: string
+  clothingTypeName: string
+  serviceCategoryId: string
+  serviceCategoryName: string
+  quantity: number
+  unitPrice: number
+  subtotal: number
+}
+
+export type QuoteResponse = {
+  lines: QuoteLine[]
+  subtotal: number
+  discountAmount: number
+  appliedCouponCode?: string | null
+  total: number
+}
+
+// ── Assignments ──────────────────────────────────────────────────────────
 export type Assignment = {
   id: string
   orderId: string
@@ -175,6 +240,7 @@ export type Assignment = {
   notes?: string | null
 }
 
+// ── Payments & refunds ───────────────────────────────────────────────────
 export type PaymentLedgerRow = {
   id: string
   orderId?: string
@@ -190,4 +256,85 @@ export type PaymentLedgerRow = {
   notes?: string | null
   verifiedBy?: string | null
   verifiedAt?: string | null
+}
+
+export type CodPaymentStatusResponse = {
+  orderId: string
+  orderNumber: string
+  paymentMethod: PaymentMethod
+  codConfirmationStatus: CodConfirmationStatus
+  customerConfirmedAt?: string | null
+  deliveryConfirmedAt?: string | null
+}
+
+export type RefundResponse = {
+  id: string
+  orderId: string
+  amount: number
+  reason?: string | null
+  status: RefundStatus
+  originalMethod?: PaymentMethod | null
+  transactionReference?: string | null
+  requestedBy?: string | null
+  processedBy?: string | null
+  requestedAt: string
+  processedAt?: string | null
+}
+
+// ── Coupons ──────────────────────────────────────────────────────────────
+export type CouponResponse = {
+  id: string
+  code: string
+  description?: string | null
+  discountType: DiscountType
+  discountValue: number
+  minOrderAmount?: number | null
+  maxDiscountAmount?: number | null
+  validFrom?: string | null
+  validTo?: string | null
+  maxUses?: number | null
+  currentUses: number
+  maxUsesPerUser: number
+  active: boolean
+}
+
+// ── Issues & reviews ─────────────────────────────────────────────────────
+export type IssueResponse = {
+  id: string
+  orderId: string
+  reportedBy: string
+  reportedByName: string
+  type: IssueType
+  description: string
+  photoUrls: string[]
+  status: IssueStatus
+  resolutionNotes?: string | null
+  refundAmount?: number | null
+  resolvedBy?: string | null
+  createdAt: string
+  resolvedAt?: string | null
+}
+
+export type ReviewResponse = {
+  id: string
+  orderId: string
+  customerId: string
+  customerName: string
+  deliveryManId?: string | null
+  overallRating: number
+  serviceRating?: number | null
+  deliveryRating?: number | null
+  comment?: string | null
+  createdAt: string
+}
+
+// ── Notifications ────────────────────────────────────────────────────────
+export type NotificationResponse = {
+  id: string
+  title: string
+  body: string
+  type: string
+  referenceId?: string | null
+  read: boolean
+  createdAt: string
 }
