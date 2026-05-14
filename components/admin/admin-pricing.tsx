@@ -4,7 +4,8 @@
 'use client'
 
 import { FormEvent, useEffect, useMemo, useState } from 'react'
-import { Trash2, History, LayoutGrid, CheckCircle2, XCircle, Zap } from 'lucide-react'
+import { Trash2, History, LayoutGrid, Zap } from 'lucide-react'
+import { toast } from 'sonner'
 import { RequireAuth } from '@/components/auth/require-auth'
 import { PricingTable } from '@/components/ui/pricing-table'
 import { apiFetch, endpoints } from '@/lib/api'
@@ -20,7 +21,6 @@ export function AdminPricing() {
   const [pricing, setPricing] = useState<PricingCell[]>([])
   const [history, setHistory] = useState<PricingCell[]>([])
   const [view, setView] = useState<'grid' | 'history'>('grid')
-  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [loading, setLoading] = useState(false)
 
   async function load() {
@@ -69,11 +69,11 @@ export function AdminPricing() {
           effectiveFrom: String(form.get('effectiveFrom'))
         }
       })
-      setMessage({ text: 'Price updated successfully', type: 'success' })
+      toast.success('Price updated successfully')
       formEl.reset() // safe: using the captured reference, not event.currentTarget
       await load()
     } catch (err) {
-      setMessage({ text: 'Failed to update price', type: 'error' })
+      toast.error('Failed to update price')
     }
   }
 
@@ -84,10 +84,10 @@ export function AdminPricing() {
         method: 'DELETE',
         token
       })
-      setMessage({ text: 'Price deactivated', type: 'success' })
+      toast.success('Price deactivated')
       await load()
     } catch (err) {
-      setMessage({ text: 'Deactivation failed', type: 'error' })
+      toast.error('Deactivation failed')
     }
   }
 
@@ -200,13 +200,6 @@ export function AdminPricing() {
                 <input name="effectiveFrom" type="date" className="w-full rounded-xl border border-ironman-navy-100 bg-ironman-navy-50 px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-ironman-red outline-none" defaultValue={new Date().toISOString().split('T')[0]} />
               </div>
             </div>
-
-            {message && (
-              <div className={`mt-6 flex items-center gap-2 rounded-xl p-3 text-xs font-bold ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                {message.type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                {message.text}
-              </div>
-            )}
 
             <button 
               type="submit" 

@@ -4,6 +4,7 @@ import { FormEvent, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { LockKeyhole } from 'lucide-react'
+import { toast } from 'sonner'
 import { apiFetch, ApiError } from '@/lib/api'
 
 export function ResetPasswordView() {
@@ -13,18 +14,16 @@ export function ResetPasswordView() {
   const [code, setCode] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirm, setConfirm] = useState('')
-  const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setError(null)
     if (newPassword !== confirm) {
-      setError('Passwords don’t match')
+      toast.error('Passwords do not match')
       return
     }
     if (newPassword.length < 8) {
-      setError('Password must be at least 8 characters')
+      toast.error('Password must be at least 8 characters')
       return
     }
     setSubmitting(true)
@@ -33,9 +32,10 @@ export function ResetPasswordView() {
         method: 'POST',
         body: { email, code, newPassword }
       })
+      toast.success('Password updated. You can now sign in.')
       router.push('/login?reset=1')
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail || err.message : 'Could not reset password')
+      toast.error(err instanceof ApiError ? err.detail || err.message : 'Could not reset password')
     } finally {
       setSubmitting(false)
     }
@@ -100,12 +100,6 @@ export function ResetPasswordView() {
               className="mt-2 w-full rounded-xl border border-ironman-navy-100 bg-white px-4 py-3 text-sm text-ironman-navy outline-none focus:border-ironman-red"
             />
           </label>
-
-          {error ? (
-            <p className="rounded-lg bg-ironman-red-50 px-3 py-2 text-xs font-bold text-ironman-red">
-              {error}
-            </p>
-          ) : null}
 
           <button
             type="submit"

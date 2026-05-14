@@ -12,11 +12,12 @@ const LocationMap = dynamic(() => import('@/components/tracking/location-map'), 
 type LiveLocationPanelProps = {
   title: string
   location: DeliveryLocation | null
+  path?: DeliveryLocation[]
   state: 'idle' | 'connecting' | 'live' | 'polling' | 'waiting' | 'error'
   error?: string | null
 }
 
-export function LiveLocationPanel({ title, location, state, error }: LiveLocationPanelProps) {
+export function LiveLocationPanel({ title, location, path = [], state, error }: LiveLocationPanelProps) {
   const visibleLocation = location ? [location] : []
 
   return (
@@ -35,7 +36,7 @@ export function LiveLocationPanel({ title, location, state, error }: LiveLocatio
         </span>
       </div>
 
-      <LocationMap locations={visibleLocation} />
+      <LocationMap locations={visibleLocation} path={path} />
 
       {location ? (
         <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">

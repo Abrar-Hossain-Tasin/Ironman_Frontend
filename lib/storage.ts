@@ -1,11 +1,12 @@
 import { getSupabaseClient } from '@/lib/supabase'
 
 const EVIDENCE_BUCKET = 'evidence'
+const AVATAR_BUCKET = 'avatars'
 
 export class StorageNotConfiguredError extends Error {
   constructor() {
     super(
-      'Supabase storage is not configured. Set NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY and create the `evidence` bucket.'
+      'Supabase storage is not configured. Set NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY and create the required storage bucket.'
     )
   }
 }
@@ -58,6 +59,36 @@ export async function uploadEvidencePhoto({
   }
 
   const { data } = client.storage.from(EVIDENCE_BUCKET).getPublicUrl(path)
+  if (!data?.publicUrl) {
+    throw new Error('Upload succeeded but public URL is unavailable.')
+  }
+  return data.publicUrl
+}
+
+export type ProfileUploadParams = {
+  file: File
+  userId: string
+}
+
+export async function uploadProfilePicture({ file, userId }: ProfileUploadParams): Promise<string> {
+  const client = getSupabaseClient()
+  if (!client) throw new StorageNotConfiguredError()
+
+  const fileName = sanitiseFileName(file.name || 'avatar.jpg')
+  const path = `${userId}/${fileName}`
+
+  const { error } = await client.storage
+    .from(AVATAR_BUCKET)
+    .upload(path, file, {
+      cacheControl: '3600',
+      upsert: true,
+      contentType: file.type || 'application/octet-stream'
+    })
+  if (error) {
+    throw new Error(`Upload failed: ${error.message}`)
+  }
+
+  const { data } = client.storage.from(AVATAR_BUCKET).getPublicUrl(path)
   if (!data?.publicUrl) {
     throw new Error('Upload succeeded but public URL is unavailable.')
   }

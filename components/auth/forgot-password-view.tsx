@@ -4,28 +4,25 @@ import { FormEvent, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { KeyRound } from 'lucide-react'
+import { toast } from 'sonner'
 import { apiFetch, ApiError } from '@/lib/api'
 
 export function ForgotPasswordView() {
   const router = useRouter()
   const [email, setEmail] = useState('')
-  const [info, setInfo] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setError(null)
-    setInfo(null)
     setSubmitting(true)
     try {
       await apiFetch('/auth/forgot-password', { method: 'POST', body: { email } })
-      setInfo('If an account exists for that email, a reset code is on its way.')
+      toast.success('If an account exists for that email, a reset code is on its way.')
       window.setTimeout(() => {
         router.push(`/reset-password?email=${encodeURIComponent(email)}`)
       }, 1200)
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail || err.message : 'Could not send reset code')
+      toast.error(err instanceof ApiError ? err.detail || err.message : 'Could not send reset code')
     } finally {
       setSubmitting(false)
     }
@@ -53,17 +50,6 @@ export function ForgotPasswordView() {
               className="mt-2 w-full rounded-xl border border-ironman-navy-100 bg-white px-4 py-3 text-sm text-ironman-navy outline-none focus:border-ironman-red"
             />
           </label>
-
-          {info ? (
-            <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
-              {info}
-            </p>
-          ) : null}
-          {error ? (
-            <p className="rounded-lg bg-ironman-red-50 px-3 py-2 text-xs font-bold text-ironman-red">
-              {error}
-            </p>
-          ) : null}
 
           <button
             type="submit"

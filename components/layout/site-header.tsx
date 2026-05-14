@@ -5,18 +5,20 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { Menu, X, UserRound, ChevronDown } from 'lucide-react'
+import { useTranslations } from 'next-intl'
+import { LanguageToggle } from '@/components/language-toggle'
 import { cn } from '@/lib/utils'
 
 // ─── DEFINING NAV ITEMS ──────────────────────────────────────────────────
-const navItems = [
-  { href: '/', label: 'Home' },
-  { href: '/pricing', label: 'Pricing' },
-  { href: '/track', label: 'Track Order' }
-]
-
 export function SiteHeader({ variant = 'light' }: { variant?: 'light' | 'dark' }) {
+  const t = useTranslations('common')
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const localizedNavItems = [
+    { href: '/', label: t('home') },
+    { href: '/pricing', label: t('pricing') },
+    { href: '/track', label: t('trackOrder') }
+  ]
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20)
@@ -58,7 +60,7 @@ export function SiteHeader({ variant = 'light' }: { variant?: 'light' | 'dark' }
 
           {/* Desktop Nav Links */}
           <nav className="hidden items-center gap-8 md:flex">
-            {navItems.map((item) => (
+            {localizedNavItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -75,6 +77,9 @@ export function SiteHeader({ variant = 'light' }: { variant?: 'light' | 'dark' }
 
           {/* Desktop Buttons */}
           <div className="hidden items-center gap-3 md:flex">
+            <div className={isDarkText ? 'text-ironman-navy' : 'text-white'}>
+              <LanguageToggle compact />
+            </div>
             <Link
               href="/login"
               className={cn(
@@ -85,13 +90,13 @@ export function SiteHeader({ variant = 'light' }: { variant?: 'light' | 'dark' }
               )}
             >
               <UserRound className="h-4 w-4" />
-              Login
+              {t('login')}
             </Link>
             <Link
               href="/register"
               className="tap-target focus-ring inline-flex items-center justify-center rounded-xl px-5 py-2.5 text-sm font-body font-semibold text-white bg-ironman-red btn-shimmer"
             >
-              Get Started
+              {t('getStarted')}
             </Link>
           </div>
 
@@ -130,7 +135,7 @@ export function SiteHeader({ variant = 'light' }: { variant?: 'light' | 'dark' }
           <div className="flex flex-col h-full p-6 pt-20">
             <Image src="/Ironman-logo.png" alt="Logo" width={140} height={48} className="brightness-0 invert mb-8" />
             <nav className="flex flex-col gap-1">
-              {navItems.map((item) => (
+              {localizedNavItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -150,15 +155,18 @@ export function SiteHeader({ variant = 'light' }: { variant?: 'light' | 'dark' }
                 onClick={() => setMenuOpen(false)}
               >
                 <UserRound className="h-4 w-4" />
-                Login
+                {t('login')}
               </Link>
               <Link
                 href="/register"
                 className="tap-target focus-ring inline-flex items-center justify-center rounded-xl px-5 py-3 font-body font-semibold text-white bg-ironman-red btn-shimmer"
                 onClick={() => setMenuOpen(false)}
               >
-                Get Started
+                {t('getStarted')}
               </Link>
+              <div className="text-white">
+                <LanguageToggle />
+              </div>
             </div>
           </div>
         </div>

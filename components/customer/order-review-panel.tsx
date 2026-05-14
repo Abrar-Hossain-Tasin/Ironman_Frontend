@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { Loader2, Star } from 'lucide-react'
+import { toast } from 'sonner'
+import { Skeleton } from '@/components/ui/skeleton'
 import { apiFetch, ApiError } from '@/lib/api'
 import type { OrderResponse, ReviewResponse } from '@/types'
 
@@ -50,6 +52,14 @@ export function OrderReviewPanel({ order, token }: OrderReviewPanelProps) {
     }
   }, [token, order.id, eligible])
 
+  useEffect(() => {
+    if (message) toast.success(message)
+  }, [message])
+
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
+
   if (!eligible) return null
 
   async function submit() {
@@ -93,7 +103,11 @@ export function OrderReviewPanel({ order, token }: OrderReviewPanelProps) {
       </p>
 
       {!loaded ? (
-        <p className="mt-3 text-sm text-gray-500">Loading…</p>
+        <div className="mt-4 space-y-3">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </div>
       ) : (
         <div className="mt-4 grid gap-3">
           <StarRow label="Overall" value={overall} onChange={setOverall} />
@@ -109,9 +123,6 @@ export function OrderReviewPanel({ order, token }: OrderReviewPanelProps) {
               placeholder="What stood out? Anything we should keep doing — or stop?"
             />
           </label>
-
-          {error ? <p className="rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p> : null}
-          {message ? <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">{message}</p> : null}
 
           <div className="flex justify-end">
             <button

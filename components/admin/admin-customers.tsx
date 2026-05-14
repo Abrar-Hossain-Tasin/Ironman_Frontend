@@ -3,7 +3,9 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { AlertOctagon, ChevronLeft, ChevronRight, Search } from 'lucide-react'
+import { toast } from 'sonner'
 import { RequireAuth } from '@/components/auth/require-auth'
+import { TableSkeleton } from '@/components/ui/skeleton'
 import { apiFetch } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
 import { formatBdt } from '@/lib/utils'
@@ -53,6 +55,10 @@ export function AdminCustomers() {
     }
   }, [token, debouncedSearch, page])
 
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
+
   const rows = data?.content ?? []
   const totalPages = data?.totalPages ?? 1
   const totalElements = data?.totalElements ?? 0
@@ -74,12 +80,8 @@ export function AdminCustomers() {
         </p>
       </div>
 
-      {error ? (
-        <p className="mb-4 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p>
-      ) : null}
-
       {loading && rows.length === 0 ? (
-        <p className="rounded-lg bg-white p-5 text-sm text-gray-500 shadow-soft">Loading customers…</p>
+        <TableSkeleton rows={8} />
       ) : rows.length === 0 ? (
         <p className="rounded-lg bg-white p-5 text-sm text-gray-600 shadow-soft">
           {debouncedSearch ? 'No customers match that search.' : 'No customers yet.'}

@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { MailCheck, ShieldCheck } from 'lucide-react'
+import { toast } from 'sonner'
 import { apiFetch, ApiError } from '@/lib/api'
 import { roleHome, useAuthStore } from '@/lib/auth-store'
 import type { AuthResponse } from '@/types'
@@ -19,8 +20,6 @@ export function VerifyEmailView() {
   const initialEmail = searchParams.get('email') ?? storedEmail ?? ''
   const [email, setEmail] = useState(initialEmail)
   const [code, setCode] = useState('')
-  const [info, setInfo] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [resendIn, setResendIn] = useState(0)
 
@@ -32,8 +31,6 @@ export function VerifyEmailView() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setError(null)
-    setInfo(null)
     setSubmitting(true)
     try {
       const auth = await apiFetch<AuthResponse>('/auth/verify-email', {
@@ -41,9 +38,10 @@ export function VerifyEmailView() {
         body: { email, code }
       })
       setAuth(auth)
+      toast.success('Email verified.')
       router.push(roleHome(auth.user.role))
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail || err.message : 'Verification failed')
+      toast.error(err instanceof ApiError ? err.detail || err.message : 'Verification failed')
     } finally {
       setSubmitting(false)
     }
@@ -51,14 +49,12 @@ export function VerifyEmailView() {
 
   async function resend() {
     if (resendIn > 0) return
-    setError(null)
-    setInfo(null)
     try {
       await apiFetch('/auth/send-verification', { method: 'POST', body: { email } })
-      setInfo('A new verification code has been sent to your inbox.')
+      toast.success('A new verification code has been sent to your inbox.')
       setResendIn(RESEND_COOLDOWN_SECONDS)
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail || err.message : 'Could not resend code')
+      toast.error(err instanceof ApiError ? err.detail || err.message : 'Could not resend code')
     }
   }
 
@@ -100,17 +96,6 @@ export function VerifyEmailView() {
               className="mt-2 w-full rounded-xl border border-ironman-navy-100 bg-white px-4 py-3 text-center text-2xl font-bold tracking-[0.5em] text-ironman-navy outline-none focus:border-ironman-red"
             />
           </label>
-
-          {info ? (
-            <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
-              {info}
-            </p>
-          ) : null}
-          {error ? (
-            <p className="rounded-lg bg-ironman-red-50 px-3 py-2 text-xs font-bold text-ironman-red">
-              {error}
-            </p>
-          ) : null}
 
           <button
             type="submit"

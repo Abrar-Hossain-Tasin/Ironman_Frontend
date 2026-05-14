@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { apiFetch } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
 
 export function LogoutButton() {
@@ -12,8 +13,14 @@ export function LogoutButton() {
       type="button"
       className="tap-target rounded-lg border border-ironman-navy px-3 py-2 text-sm font-semibold text-ironman-navy"
       onClick={() => {
-        clearAuth()
-        router.push('/login')
+        void (async () => {
+          try {
+            await apiFetch('/auth/logout', { method: 'POST', skipRefresh: true })
+          } finally {
+            clearAuth()
+            router.push('/login')
+          }
+        })()
       }}
     >
       Logout

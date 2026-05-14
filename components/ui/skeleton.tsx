@@ -50,6 +50,34 @@ export function TableSkeleton({ rows = 5 }: { rows?: number }) {
   )
 }
 
+export function PanelSkeleton({ rows = 3, className }: { rows?: number; className?: string }) {
+  return (
+    <div className={cn('rounded-lg border border-ironman-navy-100 bg-white p-5 shadow-soft', className)}>
+      <Skeleton className="h-5 w-1/3" />
+      <div className="mt-5 space-y-3">
+        {Array.from({ length: rows }).map((_, i) => (
+          <Skeleton key={i} className={cn('h-4', i % 2 === 0 ? 'w-full' : 'w-4/5')} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function DetailSkeleton() {
+  return (
+    <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
+      <section className="space-y-6">
+        <PanelSkeleton rows={5} />
+        <PanelSkeleton rows={4} />
+      </section>
+      <section className="space-y-6">
+        <Skeleton className="h-72 rounded-lg" />
+        <PanelSkeleton rows={5} />
+      </section>
+    </div>
+  )
+}
+
 export function DashboardSkeleton() {
   return (
     <div className="space-y-6">

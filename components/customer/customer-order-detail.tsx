@@ -1,6 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { RefreshCw } from 'lucide-react'
+import { toast } from 'sonner'
 import { RequireAuth } from '@/components/auth/require-auth'
 import { CodConfirmPanel } from '@/components/customer/cod-confirm-panel'
 import { OrderCancelPanel } from '@/components/customer/order-cancel-panel'
@@ -12,6 +15,7 @@ import { ReceiptPanel } from '@/components/customer/receipt-panel'
 import { OrderPaymentPanel } from '@/components/payments/order-payment-panel'
 import { PaymentLedger } from '@/components/payments/payment-ledger'
 import { LiveLocationPanel } from '@/components/tracking/live-location-panel'
+import { DetailSkeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { TrackingTimeline } from '@/components/ui/tracking-timeline'
 import { apiFetch } from '@/lib/api'
@@ -56,6 +60,7 @@ type CustomerOrderDetailProps = {
 }
 
 export function CustomerOrderDetail({ id }: CustomerOrderDetailProps) {
+  const router = useRouter()
   const token = useAuthStore((state) => state.accessToken)
   const [order, setOrder] = useState<OrderResponse | null>(null)
   const [tracking, setTracking] = useState<TrackingEvent[]>([])
@@ -84,6 +89,15 @@ export function CustomerOrderDetail({ id }: CustomerOrderDetailProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, token])
 
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
+
+  function placeAgain() {
+    if (!order) return
+    router.push(`/customer/orders/new?reorder=${order.id}`)
+  }
+
   const discount = order ? Number(order.discountAmount ?? 0) : 0
   const subtotalFromItems = order
     ? order.items.reduce((sum, item) => sum + Number(item.subtotal), 0)
@@ -102,7 +116,6 @@ export function CustomerOrderDetail({ id }: CustomerOrderDetailProps) {
 
   return (
     <RequireAuth roles={['customer']}>
-      {error ? <p className="mb-4 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p> : null}
       {order ? (
         <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
           <section className="space-y-6">
@@ -112,7 +125,17 @@ export function CustomerOrderDetail({ id }: CustomerOrderDetailProps) {
                   <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Order</p>
                   <h2 className="text-xl font-bold text-ironman-navy">{order.orderNumber}</h2>
                 </div>
-                <StatusBadge status={order.status} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={placeAgain}
+                    className="tap-target focus-ring inline-flex items-center gap-2 rounded-lg border border-ironman-navy-100 px-3 py-2 text-sm font-semibold text-ironman-navy hover:bg-ironman-navy-50"
+                  >
+                    <RefreshCw className="h-4 w-4" aria-hidden />
+                    Place again
+                  </button>
+                  <StatusBadge status={order.status} />
+                </div>
               </div>
               <dl className="mt-4 grid gap-4 sm:grid-cols-3">
                 <div>
@@ -181,6 +204,7 @@ export function CustomerOrderDetail({ id }: CustomerOrderDetailProps) {
             <LiveLocationPanel
               title="Delivery location"
               location={liveLocation.location}
+              path={liveLocation.path}
               state={liveLocation.state}
               error={liveLocation.error}
             />
@@ -191,7 +215,7 @@ export function CustomerOrderDetail({ id }: CustomerOrderDetailProps) {
           </section>
         </div>
       ) : (
-        <p className="rounded-lg bg-white p-5 text-sm font-semibold text-ironman-navy shadow-soft">Loading order...</p>
+        <DetailSkeleton />
       )}
     </RequireAuth>
   )

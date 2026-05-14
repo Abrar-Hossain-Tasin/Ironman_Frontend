@@ -2,7 +2,9 @@
 
 import { FormEvent, useEffect, useState } from 'react'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { RequireAuth } from '@/components/auth/require-auth'
+import { TableSkeleton } from '@/components/ui/skeleton'
 import { apiFetch, ApiError } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
 import { formatBdt } from '@/lib/utils'
@@ -94,6 +96,14 @@ export function AdminCoupons() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
+  useEffect(() => {
+    if (message) toast.success(message)
+  }, [message])
+
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!token) return
@@ -140,13 +150,10 @@ export function AdminCoupons() {
         <section>
           <header className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-bold text-ironman-navy">Coupons ({coupons.length})</h2>
-            {message ? (
-              <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">{message}</span>
-            ) : null}
           </header>
 
           {loading ? (
-            <p className="text-sm text-gray-500">Loading coupons…</p>
+            <TableSkeleton rows={6} />
           ) : coupons.length === 0 ? (
             <p className="rounded-lg bg-white p-5 text-sm text-gray-600 shadow-soft">
               No coupons yet. Use the form to create one.
@@ -349,8 +356,6 @@ export function AdminCoupons() {
               />
               <span className="font-semibold text-ironman-navy">Active</span>
             </label>
-
-            {error ? <p className="mt-3 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p> : null}
 
             <div className="mt-4 flex gap-2">
               {draft.id ? (

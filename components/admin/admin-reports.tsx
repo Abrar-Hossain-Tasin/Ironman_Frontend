@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 import { RequireAuth } from '@/components/auth/require-auth'
 import { MetricCard } from '@/components/ui/metric-card'
+import { DashboardSkeleton } from '@/components/ui/skeleton'
 import { apiFetch } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
 import { formatBdt } from '@/lib/utils'
@@ -26,6 +28,10 @@ export function AdminReports() {
     () => WINDOW_OPTIONS.find((opt) => opt.key === windowKey)?.days ?? 30,
     [windowKey]
   )
+
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
 
   useEffect(() => {
     if (!token) return
@@ -64,11 +70,7 @@ export function AdminReports() {
         ))}
       </div>
 
-      {loading && !data ? <p className="text-sm text-gray-500">Loading report…</p> : null}
-      {error ? (
-        <p className="mb-4 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p>
-      ) : null}
-
+      {loading && !data ? <DashboardSkeleton /> : null}
       {data ? (
         <>
           <div className="grid gap-4 md:grid-cols-4">

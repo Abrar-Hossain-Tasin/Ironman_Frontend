@@ -8,10 +8,12 @@ const nav = [
   { href: '/customer/profile', label: 'Profile', icon: 'UserRound' }
 ]
 
-export default function CustomerOrderDetailPage({ params }: { params: { id: string } }) {
+export default async function CustomerOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+
   return (
     <PortalShell title="Order Detail" subtitle="Order detail" nav={nav}>
-      <CustomerOrderDetail id={params.id} />
+      <CustomerOrderDetail id={id} />
     </PortalShell>
   )
 }

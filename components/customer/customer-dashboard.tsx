@@ -2,9 +2,11 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 import { RequireAuth } from '@/components/auth/require-auth'
 import { MetricCard } from '@/components/ui/metric-card'
 import { OrderTable } from '@/components/orders/order-table'
+import { TableSkeleton } from '@/components/ui/skeleton'
 import { apiFetch } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
 import { orderToSummary } from '@/lib/mappers'
@@ -58,6 +60,10 @@ export function CustomerDashboard() {
     }
   }, [token])
 
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
+
   const summaries = useMemo(() => recent.map(orderToSummary), [recent])
 
   return (
@@ -73,10 +79,9 @@ export function CustomerDashboard() {
           Place New Order
         </Link>
       </div>
-      {error ? <p className="mt-4 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p> : null}
       <div className="mt-4">
         {loading && recent.length === 0 ? (
-          <p className="rounded-lg bg-white p-5 text-sm text-gray-500 shadow-soft">Loading recent orders…</p>
+          <TableSkeleton rows={6} />
         ) : recent.length === 0 ? (
           <div className="rounded-lg border border-dashed border-ironman-navy-100 bg-white p-8 text-center shadow-soft">
             <p className="text-sm font-semibold text-ironman-navy">No orders yet</p>

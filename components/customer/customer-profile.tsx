@@ -1,10 +1,12 @@
 'use client'
 
-import { FormEvent, useEffect, useState } from 'react'
-import { Pencil, Star, Trash2, X } from 'lucide-react'
+import { ChangeEvent, FormEvent, useEffect, useState } from 'react'
+import { Camera, Loader2, Pencil, Star, Trash2, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { RequireAuth } from '@/components/auth/require-auth'
 import { apiFetch, ApiError } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
+import { StorageNotConfiguredError, uploadProfilePicture } from '@/lib/storage'
 import type { AddressResponse, UserSummary } from '@/types'
 
 type AddressDraft = {
@@ -30,7 +32,7 @@ const emptyAddressDraft: AddressDraft = {
 
 export function CustomerProfile() {
   const token = useAuthStore((state) => state.accessToken)
-  const setAuth = useAuthStore((state) => state.setAuth)
+  const setAuthUser = useAuthStore((state) => state.setUser)
   const authUser = useAuthStore((state) => state.user)
   const [user, setUser] = useState<UserSummary | null>(null)
   const [addresses, setAddresses] = useState<AddressResponse[]>([])
@@ -46,6 +48,7 @@ export function CustomerProfile() {
   const [passwordSaving, setPasswordSaving] = useState(false)
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null)
   const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [avatarUploading, setAvatarUploading] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -66,6 +69,22 @@ export function CustomerProfile() {
       cancelled = true
     }
   }, [token])
+
+  useEffect(() => {
+    if (message) toast.success(message)
+  }, [message])
+
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
+
+  useEffect(() => {
+    if (passwordMessage) toast.success(passwordMessage)
+  }, [passwordMessage])
+
+  useEffect(() => {
+    if (passwordError) toast.error(passwordError)
+  }, [passwordError])
 
   function flashMessage(text: string) {
     setMessage(text)
@@ -90,16 +109,51 @@ export function CustomerProfile() {
       setUser(updated)
       // Keep the auth-store copy fresh so the header / role gates see the new name.
       if (authUser) {
-        setAuth({
-          accessToken: useAuthStore.getState().accessToken ?? '',
-          refreshToken: useAuthStore.getState().refreshToken ?? '',
-          tokenType: 'Bearer',
-          user: updated
-        })
+        setAuthUser(updated)
       }
       flashMessage('Profile updated')
     } catch (err) {
       setError(err instanceof ApiError ? err.detail || err.message : err instanceof Error ? err.message : 'Could not save profile')
+    }
+  }
+
+  async function uploadAvatar(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file || !token || !user) return
+    if (!file.type.startsWith('image/')) {
+      toast.error('Choose an image file for your profile picture.')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Profile picture must be 2 MB or smaller.')
+      return
+    }
+    setAvatarUploading(true)
+    try {
+      const profilePictureUrl = await uploadProfilePicture({ file, userId: user.id })
+      const updated = await apiFetch<UserSummary>('/users/me', {
+        method: 'PUT',
+        token,
+        body: {
+          fullName: user.fullName,
+          phone: user.phone,
+          profilePictureUrl
+        }
+      })
+      setUser(updated)
+      if (authUser) {
+        setAuthUser(updated)
+      }
+      toast.success('Profile picture updated')
+    } catch (err) {
+      if (err instanceof StorageNotConfiguredError) {
+        toast.error('Supabase avatar storage is not configured. Create an `avatars` bucket and set frontend Supabase env vars.')
+      } else {
+        toast.error(err instanceof Error ? err.message : 'Could not upload profile picture')
+      }
+    } finally {
+      setAvatarUploading(false)
     }
   }
 
@@ -241,17 +295,28 @@ export function CustomerProfile() {
 
   return (
     <RequireAuth roles={['customer']}>
-      {message ? (
-        <p className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">{message}</p>
-      ) : null}
-      {error ? (
-        <p className="mb-4 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p>
-      ) : null}
-
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-lg border border-ironman-navy-100 bg-white p-5 shadow-soft">
-          <h2 className="text-xl font-bold text-ironman-navy">Profile</h2>
-          <form className="mt-4 space-y-3" onSubmit={updateProfile}>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="relative h-20 w-20 overflow-hidden rounded-full bg-ironman-navy-50 ring-1 ring-ironman-navy-100">
+              {user?.profilePictureUrl ? (
+                <img src={user.profilePictureUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="grid h-full w-full place-items-center text-2xl font-bold text-ironman-navy">
+                  {(user?.fullName ?? authUser?.fullName ?? 'I').slice(0, 1).toUpperCase()}
+                </div>
+              )}
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-ironman-navy">Profile</h2>
+              <label className="tap-target focus-ring mt-2 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-ironman-navy-100 px-3 py-2 text-sm font-semibold text-ironman-navy">
+                {avatarUploading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Camera className="h-4 w-4" aria-hidden />}
+                {avatarUploading ? 'Uploading...' : 'Upload picture'}
+                <input type="file" accept="image/*" className="sr-only" onChange={uploadAvatar} disabled={avatarUploading} />
+              </label>
+            </div>
+          </div>
+          <form key={user?.id ?? 'profile-form'} className="mt-4 space-y-3" onSubmit={updateProfile}>
             <label className="block">
               <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Full name</span>
               <input
@@ -310,12 +375,6 @@ export function CustomerProfile() {
                 required
               />
             </label>
-            {passwordMessage ? (
-              <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">{passwordMessage}</p>
-            ) : null}
-            {passwordError ? (
-              <p className="rounded-lg bg-ironman-red-50 px-3 py-2 text-xs font-semibold text-ironman-red">{passwordError}</p>
-            ) : null}
             <button
               type="submit"
               disabled={passwordSaving}

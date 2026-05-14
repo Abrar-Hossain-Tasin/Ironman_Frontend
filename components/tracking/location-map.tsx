@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from 'react'
 import L from 'leaflet'
-import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet'
+import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { DeliveryLocation } from '@/types'
 
@@ -18,11 +18,13 @@ const markerIcon = new L.Icon({
 
 type LocationMapProps = {
   locations: DeliveryLocation[]
+  path?: DeliveryLocation[]
   heightClassName?: string
 }
 
-export default function LocationMap({ locations, heightClassName = 'h-72' }: LocationMapProps) {
+export default function LocationMap({ locations, path = [], heightClassName = 'h-72' }: LocationMapProps) {
   const validLocations = locations.filter(isValidLocation)
+  const validPath = path.filter(isValidLocation)
   const center = validLocations[0]
 
   if (!center) {
@@ -45,7 +47,13 @@ export default function LocationMap({ locations, heightClassName = 'h-72' }: Loc
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <MapViewport locations={validLocations} />
+        <MapViewport locations={validPath.length > 1 ? [...validPath, ...validLocations] : validLocations} />
+        {validPath.length > 1 ? (
+          <Polyline
+            positions={validPath.map((location) => [Number(location.latitude), Number(location.longitude)])}
+            pathOptions={{ color: '#D81B2A', weight: 4, opacity: 0.8 }}
+          />
+        ) : null}
         {validLocations.map((location) => (
           <Marker
             key={`${location.deliveryManId}-${location.orderId ?? 'idle'}`}

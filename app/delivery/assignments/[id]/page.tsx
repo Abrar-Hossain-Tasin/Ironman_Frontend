@@ -6,10 +6,12 @@ const nav = [
   { href: '/delivery/dashboard', label: 'Assignments', icon: 'Truck' }
 ]
 
-export default function DeliveryAssignmentDetailPage({ params }: { params: { id: string } }) {
+export default async function DeliveryAssignmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+
   return (
     <PortalShell title="Assignment Detail" subtitle="Delivery man app" nav={nav}>
-      <DeliveryAssignmentDetail id={params.id} />
+      <DeliveryAssignmentDetail id={id} />
     </PortalShell>
   )
 }

@@ -2,7 +2,9 @@
 
 import { FormEvent, useEffect, useState } from 'react'
 import { MapPin, WalletCards } from 'lucide-react'
+import { toast } from 'sonner'
 import { RequireAuth } from '@/components/auth/require-auth'
+import { DetailSkeleton } from '@/components/ui/skeleton'
 import { AssignmentCard } from '@/components/tasks/assignment-card'
 import { CompleteAssignmentPanel } from '@/components/tasks/complete-assignment-panel'
 import { DeliveryCodReceivePanel } from '@/components/delivery/delivery-cod-receive-panel'
@@ -21,6 +23,7 @@ export function DeliveryAssignmentDetail({ id }: DeliveryAssignmentDetailProps) 
   const token = useAuthStore((state) => state.accessToken)
   const [assignment, setAssignment] = useState<Assignment | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   async function load() {
     if (!token) return
@@ -29,9 +32,17 @@ export function DeliveryAssignmentDetail({ id }: DeliveryAssignmentDetailProps) 
   }
 
   useEffect(() => {
-    void load()
+    void load().catch((err) => setError(err instanceof Error ? err.message : 'Could not load assignment'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, token])
+
+  useEffect(() => {
+    if (message) toast.success(message)
+  }, [message])
+
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
 
   async function recordCash(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -117,9 +128,6 @@ export function DeliveryAssignmentDetail({ id }: DeliveryAssignmentDetailProps) 
           </div>
 
           <aside className="space-y-4">
-            {message ? (
-              <p className="rounded-lg bg-ironman-navy-50 px-3 py-2 text-sm font-semibold text-ironman-navy">{message}</p>
-            ) : null}
             <a
               href={`https://www.openstreetmap.org/search?query=${encodeURIComponent(assignment.address ?? '')}`}
               target="_blank"
@@ -179,7 +187,7 @@ export function DeliveryAssignmentDetail({ id }: DeliveryAssignmentDetailProps) 
           </aside>
         </div>
       ) : (
-        <p className="rounded-lg bg-white p-5 text-sm font-semibold text-ironman-navy shadow-soft">Loading assignment...</p>
+        <DetailSkeleton />
       )}
     </RequireAuth>
   )

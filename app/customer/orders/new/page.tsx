@@ -8,10 +8,16 @@ const nav = [
   { href: '/customer/profile', label: 'Profile', icon: 'UserRound' }
 ]
 
-export default function NewOrderPage() {
+export default async function NewOrderPage({
+  searchParams
+}: {
+  searchParams?: Promise<{ reorder?: string }>
+}) {
+  const resolvedSearchParams = await searchParams
+
   return (
     <PortalShell title="Place New Order" subtitle="Customer portal" nav={nav}>
-      <OrderWizard />
+      <OrderWizard reorderOrderId={resolvedSearchParams?.reorder} />
     </PortalShell>
   )
 }

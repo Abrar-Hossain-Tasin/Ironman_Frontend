@@ -21,6 +21,7 @@ import { apiFetch } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
 import { getSupabaseClient } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
+import { Skeleton } from '@/components/ui/skeleton'
 import type { NotificationResponse } from '@/types'
 
 // Pick an icon + tone for a notification by its `type` discriminator. Unknown
@@ -193,7 +194,11 @@ export function NotificationBell() {
 
           <ul className="max-h-96 divide-y divide-ironman-navy-100 overflow-y-auto">
             {loading && items.length === 0 ? (
-              <li className="px-4 py-10 text-center text-sm text-gray-500">Loading…</li>
+              <li className="space-y-3 px-4 py-5">
+                <Skeleton className="h-4 w-1/3" />
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-4/5" />
+              </li>
             ) : items.length === 0 ? (
               <li className="px-4 py-10 text-center text-sm text-gray-500">
                 You have no notifications yet.

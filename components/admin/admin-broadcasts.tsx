@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from 'react'
 import { Loader2, Send } from 'lucide-react'
+import { toast } from 'sonner'
 import { RequireAuth } from '@/components/auth/require-auth'
 import { apiFetch, ApiError } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
@@ -22,22 +23,18 @@ export function AdminBroadcasts() {
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!token) return
     if (title.trim().length < 3 || body.trim().length < 5) {
-      setError('Title (≥3 chars) and body (≥5 chars) are required.')
+      toast.error('Title and message are too short.')
       return
     }
     if (!confirm(`Send this broadcast to ${AUDIENCES.find((a) => a.value === audience)?.label}? Recipients will be notified immediately.`)) {
       return
     }
     setSubmitting(true)
-    setError(null)
-    setMessage(null)
     try {
       const result = await apiFetch<{ message: string }>('/admin/notifications/broadcast', {
         method: 'POST',
@@ -48,11 +45,11 @@ export function AdminBroadcasts() {
           role: audience === 'all' ? null : audience
         }
       })
-      setMessage(result.message)
+      toast.success(result.message)
       setTitle('')
       setBody('')
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail || err.message : err instanceof Error ? err.message : 'Could not send broadcast')
+      toast.error(err instanceof ApiError ? err.detail || err.message : err instanceof Error ? err.message : 'Could not send broadcast')
     } finally {
       setSubmitting(false)
     }
@@ -115,13 +112,6 @@ export function AdminBroadcasts() {
               className="mt-1 w-full rounded-lg border border-ironman-navy-100 bg-white px-3 py-2 text-sm focus-ring"
             />
           </label>
-
-          {error ? (
-            <p className="mt-3 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p>
-          ) : null}
-          {message ? (
-            <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">{message}</p>
-          ) : null}
 
           <button
             type="submit"

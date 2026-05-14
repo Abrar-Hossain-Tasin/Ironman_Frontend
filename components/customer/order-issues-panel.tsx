@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { AlertOctagon, Loader2, Plus } from 'lucide-react'
+import { toast } from 'sonner'
+import { Skeleton } from '@/components/ui/skeleton'
 import { apiFetch, ApiError } from '@/lib/api'
 import { PhotoEvidenceField } from '@/components/tasks/photo-evidence-field'
 import { statusLabel } from '@/lib/utils'
@@ -56,6 +58,10 @@ export function OrderIssuesPanel({ order, token }: OrderIssuesPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, order.id])
 
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
+
   async function submit() {
     if (!token) return
     if (description.trim().length < 5) {
@@ -78,6 +84,7 @@ export function OrderIssuesPanel({ order, token }: OrderIssuesPanelProps) {
       setDescription('')
       setPhotoUrls([])
       setOpen(false)
+      toast.success('Issue submitted')
     } catch (err) {
       const msg = err instanceof ApiError ? err.detail || err.message : err instanceof Error ? err.message : 'Could not submit issue'
       setError(msg || 'Could not submit issue')
@@ -143,8 +150,6 @@ export function OrderIssuesPanel({ order, token }: OrderIssuesPanelProps) {
             disabled={submitting}
           />
 
-          {error ? <p className="rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p> : null}
-
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setOpen(false)} className="tap-target rounded-lg border border-ironman-navy-100 bg-white px-3 py-2 text-sm font-semibold text-ironman-navy">
               Cancel
@@ -164,7 +169,10 @@ export function OrderIssuesPanel({ order, token }: OrderIssuesPanelProps) {
 
       <div className="mt-4 space-y-2">
         {loading ? (
-          <p className="text-sm text-gray-500">Loading complaints…</p>
+          <div className="space-y-2">
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+          </div>
         ) : issues.length ? (
           issues.map((issue) => (
             <article key={issue.id} className="rounded-lg border border-ironman-navy-100 p-3">

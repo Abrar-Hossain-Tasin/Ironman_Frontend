@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { toast } from 'sonner'
 import { RequireAuth } from '@/components/auth/require-auth'
 import { OrderTable } from '@/components/orders/order-table'
+import { TableSkeleton } from '@/components/ui/skeleton'
 import { apiFetch } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
 import { orderToSummary } from '@/lib/mappers'
@@ -83,6 +85,10 @@ export function CustomerOrders() {
     setPage(0)
   }, [status, from, to])
 
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
+
   const summaries = useMemo(() => orders.map(orderToSummary), [orders])
 
   return (
@@ -136,12 +142,8 @@ export function CustomerOrders() {
         </button>
       </div>
 
-      {error ? (
-        <p className="mb-4 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p>
-      ) : null}
-
       {loading && orders.length === 0 ? (
-        <p className="rounded-lg bg-white p-5 text-sm text-gray-500 shadow-soft">Loading orders…</p>
+        <TableSkeleton rows={8} />
       ) : orders.length === 0 ? (
         <p className="rounded-lg bg-white p-5 text-sm font-semibold text-ironman-navy shadow-soft">
           No orders match the selected filters.

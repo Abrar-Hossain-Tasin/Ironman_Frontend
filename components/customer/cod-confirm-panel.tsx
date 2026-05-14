@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { CheckCircle2, HandCoins, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { apiFetch, ApiError } from '@/lib/api'
 import { getSupabaseClient } from '@/lib/supabase'
 import type { CodPaymentStatusResponse, OrderResponse } from '@/types'
@@ -64,6 +65,14 @@ export function CodConfirmPanel({ order, token, onConfirmed }: CodConfirmPanelPr
     }
   }, [token, order.id, shouldShow])
 
+  useEffect(() => {
+    if (message) toast.success(message)
+  }, [message])
+
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
+
   if (!shouldShow) return null
 
   async function confirm() {
@@ -112,9 +121,6 @@ export function CodConfirmPanel({ order, token, onConfirmed }: CodConfirmPanelPr
           subtitle={deliveryConfirmed ? 'Logged from delivery app' : 'Waiting on the delivery man.'}
         />
       </div>
-
-      {message ? <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">{message}</p> : null}
-      {error ? <p className="mt-3 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p> : null}
 
       {!customerConfirmed ? (
         <button

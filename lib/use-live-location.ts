@@ -8,22 +8,25 @@ type LiveLocationState = 'idle' | 'connecting' | 'live' | 'polling' | 'waiting' 
 
 type LiveLocationResult = {
   location: DeliveryLocation | null
+  path: DeliveryLocation[]
   state: LiveLocationState
   error: string | null
 }
 
 export function useOrderLiveLocation(
   orderId: string | undefined,
-  token: string | null,
+  _token: string | null,
   enabled: boolean
 ): LiveLocationResult {
   const [location, setLocation] = useState<DeliveryLocation | null>(null)
+  const [path, setPath] = useState<DeliveryLocation[]>([])
   const [state, setState] = useState<LiveLocationState>('idle')
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!enabled || !orderId || !token) {
+    if (!enabled || !orderId) {
       setLocation(null)
+      setPath([])
       setState('idle')
       setError(null)
       return
@@ -35,9 +38,10 @@ export function useOrderLiveLocation(
 
     async function readLatest(nextState: LiveLocationState = 'polling') {
       try {
-        const nextLocation = await apiFetch<DeliveryLocation>(`/location/orders/${orderId}`, { token })
+        const nextLocation = await apiFetch<DeliveryLocation>(`/location/orders/${orderId}`)
         if (!cancelled) {
           setLocation(nextLocation)
+          setPath((current) => appendPath(current, nextLocation))
           setState(nextState)
           setError(null)
         }
@@ -63,10 +67,10 @@ export function useOrderLiveLocation(
       try {
         const response = await fetch(apiUrl(`/location/orders/${orderId}/stream`), {
           headers: {
-            Accept: 'text/event-stream',
-            Authorization: `Bearer ${token}`
+            Accept: 'text/event-stream'
           },
           cache: 'no-store',
+          credentials: 'include',
           signal: controller.signal
         })
 
@@ -92,6 +96,7 @@ export function useOrderLiveLocation(
             const nextLocation = parseSseLocation(block)
             if (nextLocation) {
               setLocation(nextLocation)
+              setPath((current) => appendPath(current, nextLocation))
               setState('live')
               setError(null)
             }
@@ -118,9 +123,20 @@ export function useOrderLiveLocation(
         clearInterval(pollTimer)
       }
     }
-  }, [enabled, orderId, token])
+  }, [enabled, orderId])
 
-  return { location, state, error }
+  return { location, path, state, error }
+}
+
+function appendPath(current: DeliveryLocation[], next: DeliveryLocation) {
+  const lat = Number(next.latitude)
+  const lng = Number(next.longitude)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return current
+  const previous = current[current.length - 1]
+  if (previous && Number(previous.latitude) === lat && Number(previous.longitude) === lng) {
+    return current
+  }
+  return [...current.slice(-49), next]
 }
 
 function parseSseLocation(block: string): DeliveryLocation | null {

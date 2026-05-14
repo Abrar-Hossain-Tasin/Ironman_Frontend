@@ -2,6 +2,7 @@
 
 import { useEffect, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
+import { PanelSkeleton } from '@/components/ui/skeleton'
 import { useAuthStore } from '@/lib/auth-store'
 import type { UserRole } from '@/types'
 
@@ -28,7 +29,7 @@ export function RequireAuth({ roles, children }: RequireAuthProps) {
   }, [accessToken, hasHydrated, roles, router, user])
 
   if (!hasHydrated) {
-    return <p className="rounded-lg bg-white p-5 text-sm font-semibold text-ironman-navy shadow-soft">Loading...</p>
+    return <PanelSkeleton rows={3} />
   }
 
   if (!accessToken) {

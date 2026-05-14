@@ -1,9 +1,11 @@
 'use client'
 
 import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 import { RequireAuth } from '@/components/auth/require-auth'
 import { PaymentLedger } from '@/components/payments/payment-ledger'
 import { LiveLocationPanel } from '@/components/tracking/live-location-panel'
+import { DetailSkeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { TrackingTimeline } from '@/components/ui/tracking-timeline'
 import { apiFetch, ApiError } from '@/lib/api'
@@ -113,6 +115,14 @@ export function AdminOrderDetail({ id }: AdminOrderDetailProps) {
     void load().catch((err) => setError(err instanceof Error ? err.message : 'Could not load order'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, token])
+
+  useEffect(() => {
+    if (message) toast.success(message)
+  }, [message])
+
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
 
   function flash(text: string) {
     setMessage(text)
@@ -357,13 +367,6 @@ export function AdminOrderDetail({ id }: AdminOrderDetailProps) {
               </form>
             </div>
 
-            {message ? (
-              <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">{message}</p>
-            ) : null}
-            {error ? (
-              <p className="rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p>
-            ) : null}
-
             <PaymentLedger payments={payments} onVerify={verifyPayment} />
           </section>
 
@@ -371,6 +374,7 @@ export function AdminOrderDetail({ id }: AdminOrderDetailProps) {
             <LiveLocationPanel
               title="Delivery location"
               location={liveLocation.location}
+              path={liveLocation.path}
               state={liveLocation.state}
               error={liveLocation.error}
             />
@@ -380,7 +384,7 @@ export function AdminOrderDetail({ id }: AdminOrderDetailProps) {
           </section>
         </div>
       ) : (
-        <p className="rounded-lg bg-white p-5 text-sm font-semibold text-ironman-navy shadow-soft">Loading order...</p>
+        <DetailSkeleton />
       )}
     </RequireAuth>
   )

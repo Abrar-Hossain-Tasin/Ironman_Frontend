@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 import { RequireAuth } from '@/components/auth/require-auth'
 import { AssignmentCard } from '@/components/tasks/assignment-card'
 import { CompleteAssignmentPanel } from '@/components/tasks/complete-assignment-panel'
@@ -29,6 +30,10 @@ export function WorkerDashboard() {
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
+
+  useEffect(() => {
+    if (message) toast.success(message)
+  }, [message])
 
   const groups = useMemo(() => {
     const grouped = new Map<AssignmentType, Assignment[]>()
@@ -88,10 +93,6 @@ export function WorkerDashboard() {
 
   return (
     <RequireAuth roles={['wash_man', 'iron_man', 'dry_clean_man']}>
-      {message ? (
-        <p className="mb-4 rounded-lg bg-ironman-navy-50 px-3 py-2 text-sm font-semibold text-ironman-navy">{message}</p>
-      ) : null}
-
       {groups.length === 0 ? (
         <p className="rounded-lg bg-white p-5 text-sm font-semibold text-ironman-navy shadow-soft">
           No active tasks. New work will appear here as soon as an order is assigned to you.

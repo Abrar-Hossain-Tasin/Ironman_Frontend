@@ -1,8 +1,9 @@
 'use client'
 
-import { FormEvent, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import { CheckCircle2, CreditCard, QrCode, WalletCards } from 'lucide-react'
+import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
 import { formatBdt } from '@/lib/utils'
 import type { OrderResponse, PaymentLedgerRow, PaymentMethod } from '@/types'
@@ -28,6 +29,14 @@ export function OrderPaymentPanel({ order, token, onPaymentRecorded }: OrderPaym
 
   const canSubmitBkash = useMemo(() => due > 0 && transactionId.trim().length >= 6, [due, transactionId])
 
+  useEffect(() => {
+    if (message) toast.success(message)
+  }, [message])
+
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
+
   async function submitBkash(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!token || !canSubmitBkash) return
@@ -50,7 +59,7 @@ export function OrderPaymentPanel({ order, token, onPaymentRecorded }: OrderPaym
       setTransactionId('')
       setPayerPhone('')
       setNotes('')
-      setMessage('bKash payment submitted. Your order paid amount has been updated.')
+      setMessage('bKash payment submitted for admin verification.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not submit bKash payment')
     } finally {
@@ -149,8 +158,6 @@ export function OrderPaymentPanel({ order, token, onPaymentRecorded }: OrderPaym
         </>
       )}
 
-      {message ? <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">{message}</p> : null}
-      {error ? <p className="mt-4 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p> : null}
     </section>
   )
 }

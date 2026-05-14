@@ -1,12 +1,20 @@
 import type { AuthResponse } from '@/types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8090/api/v1'
+const CSRF_HEADER = 'X-CSRF-Token'
+const CSRF_STORAGE_KEY = 'ironman-csrf-token'
 
 type ApiOptions = Omit<RequestInit, 'body'> & {
+  /**
+   * Kept for existing callers while auth migrates to httpOnly cookies.
+   * The value is intentionally ignored and never sent as a bearer token.
+   */
   token?: string | null
   body?: BodyInit | Record<string, unknown> | null
   /** When true, skip the silent-refresh retry on 401. Used internally to avoid loops. */
   skipRefresh?: boolean
+  /** Used internally after refreshing a stale CSRF token. */
+  skipCsrfRetry?: boolean
 }
 
 export class ApiError extends Error {
@@ -19,33 +27,47 @@ export class ApiError extends Error {
   }
 }
 
-// Pluggable hooks wired by the auth store. Defined as module-level callbacks
-// so this file stays framework-agnostic (no React imports) and can be called
-// from anywhere — including non-component code paths.
 type RefreshContext = {
-  getRefreshToken: () => string | null
   onRefreshed: (auth: AuthResponse) => void
   onAuthLost: () => void
 }
 
 let refreshCtx: RefreshContext | null = null
 let inFlightRefresh: Promise<AuthResponse | null> | null = null
+let csrfToken: string | null = null
+let inFlightCsrf: Promise<string | null> | null = null
 
 export function configureAuthRefresh(ctx: RefreshContext) {
   refreshCtx = ctx
 }
 
+export function setCsrfToken(token: string | null | undefined) {
+  csrfToken = token?.trim() || null
+  if (typeof window === 'undefined') return
+  try {
+    if (csrfToken) {
+      window.sessionStorage.setItem(CSRF_STORAGE_KEY, csrfToken)
+    } else {
+      window.sessionStorage.removeItem(CSRF_STORAGE_KEY)
+    }
+  } catch {
+    // Session storage can be unavailable in strict privacy modes.
+  }
+}
+
+export function clearCsrfToken() {
+  setCsrfToken(null)
+}
+
 async function attemptRefresh(): Promise<AuthResponse | null> {
   if (!refreshCtx) return null
-  const refreshToken = refreshCtx.getRefreshToken()
-  if (!refreshToken) return null
-  // De-dupe concurrent refreshes so a burst of 401s only triggers one /auth/refresh.
   if (inFlightRefresh) return inFlightRefresh
+
   inFlightRefresh = (async () => {
     try {
       const next = await apiFetch<AuthResponse>('/auth/refresh', {
         method: 'POST',
-        body: { refreshToken },
+        body: null,
         skipRefresh: true
       })
       refreshCtx?.onRefreshed(next)
@@ -61,40 +83,38 @@ async function attemptRefresh(): Promise<AuthResponse | null> {
 }
 
 export async function apiFetch<T>(path: string, init?: ApiOptions): Promise<T> {
+  const method = (init?.method ?? 'GET').toUpperCase()
+  const unsafeRequest = isUnsafeMethod(method)
   const headers = new Headers(init?.headers)
-  headers.set('Content-Type', 'application/json')
+  headers.set('Accept', headers.get('Accept') ?? 'application/json')
 
-  if (init?.token) {
-    headers.set('Authorization', `Bearer ${init.token}`)
+  if (unsafeRequest) {
+    const token = await ensureCsrfToken()
+    if (token) headers.set(CSRF_HEADER, token)
   }
 
-  let body: BodyInit | null | undefined
-  if (
-    init?.body &&
-    typeof init.body === 'object' &&
-    !(init.body instanceof FormData) &&
-    !(init.body instanceof Blob) &&
-    !(init.body instanceof URLSearchParams)
-  ) {
-    body = JSON.stringify(init.body)
-  } else {
-    body = init?.body as BodyInit | null | undefined
-  }
+  const body = normalizeBody(init?.body, headers)
 
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     headers,
     body,
-    cache: 'no-store'
+    cache: 'no-store',
+    credentials: 'include'
   })
 
-  // ─── 401 → silent refresh + retry (once) ─────────────────────────────
-  // We only attempt when the caller sent a token (i.e. it's an authed call)
-  // and we haven't already retried this request.
-  if (response.status === 401 && init?.token && !init.skipRefresh) {
+  const responseCsrf = response.headers.get(CSRF_HEADER)
+  if (responseCsrf) setCsrfToken(responseCsrf)
+
+  if (response.status === 403 && unsafeRequest && !init?.skipCsrfRetry) {
+    clearCsrfToken()
+    return apiFetch<T>(path, { ...init, skipCsrfRetry: true })
+  }
+
+  if (response.status === 401 && !init?.skipRefresh && !isPublicAuthPath(path)) {
     const next = await attemptRefresh()
-    if (next?.accessToken) {
-      return apiFetch<T>(path, { ...init, token: next.accessToken, skipRefresh: true })
+    if (next) {
+      return apiFetch<T>(path, { ...init, skipRefresh: true })
     }
   }
 
@@ -103,7 +123,7 @@ export async function apiFetch<T>(path: string, init?: ApiOptions): Promise<T> {
     const resClone = response.clone()
     try {
       const problem = await response.json()
-      detail = problem.detail ?? problem.title ?? detail
+      detail = problem.detail ?? problem.title ?? problem.message ?? detail
     } catch {
       detail = await resClone.text()
     }
@@ -114,7 +134,9 @@ export async function apiFetch<T>(path: string, init?: ApiOptions): Promise<T> {
     return undefined as T
   }
 
-  return response.json() as Promise<T>
+  const data = (await response.json()) as T
+  captureCsrfFromBody(data)
+  return data
 }
 
 export const endpoints = {
@@ -129,4 +151,87 @@ export const endpoints = {
 
 export function apiUrl(path: string) {
   return `${API_URL}${path}`
+}
+
+function normalizeBody(
+  rawBody: ApiOptions['body'] | undefined,
+  headers: Headers
+): BodyInit | null | undefined {
+  if (rawBody == null) return rawBody as null | undefined
+  if (isJsonPayload(rawBody)) {
+    if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+    return JSON.stringify(rawBody)
+  }
+  return rawBody as BodyInit
+}
+
+function isJsonPayload(body: ApiOptions['body']): body is Record<string, unknown> {
+  return Boolean(
+    body
+      && typeof body === 'object'
+      && !(body instanceof FormData)
+      && !(body instanceof Blob)
+      && !(body instanceof URLSearchParams)
+      && !(body instanceof ArrayBuffer)
+      && !(ArrayBuffer.isView(body))
+  )
+}
+
+function isUnsafeMethod(method: string) {
+  return method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' && method !== 'TRACE'
+}
+
+function isPublicAuthPath(path: string) {
+  return [
+    '/auth/csrf',
+    '/auth/login',
+    '/auth/register',
+    '/auth/send-verification',
+    '/auth/verify-email',
+    '/auth/forgot-password',
+    '/auth/reset-password'
+  ].includes(path)
+}
+
+async function ensureCsrfToken() {
+  const stored = readStoredCsrfToken()
+  if (stored) return stored
+  if (typeof window === 'undefined') return null
+  if (inFlightCsrf) return inFlightCsrf
+
+  inFlightCsrf = (async () => {
+    const response = await fetch(`${API_URL}/auth/csrf`, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+      credentials: 'include'
+    })
+    if (!response.ok) {
+      throw new ApiError('Could not initialize the security token.', response.status)
+    }
+    const data = (await response.json()) as { csrfToken?: string | null }
+    const nextToken = data.csrfToken ?? response.headers.get(CSRF_HEADER)
+    setCsrfToken(nextToken)
+    return nextToken ?? null
+  })().finally(() => {
+    inFlightCsrf = null
+  })
+
+  return inFlightCsrf
+}
+
+function readStoredCsrfToken() {
+  if (csrfToken) return csrfToken
+  if (typeof window === 'undefined') return null
+  try {
+    csrfToken = window.sessionStorage.getItem(CSRF_STORAGE_KEY)
+  } catch {
+    csrfToken = null
+  }
+  return csrfToken
+}
+
+function captureCsrfFromBody(data: unknown) {
+  if (!data || typeof data !== 'object' || !('csrfToken' in data)) return
+  const nextToken = (data as { csrfToken?: unknown }).csrfToken
+  if (typeof nextToken === 'string') setCsrfToken(nextToken)
 }

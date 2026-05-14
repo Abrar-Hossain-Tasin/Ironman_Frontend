@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { ClipboardCheck, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { apiFetch, ApiError } from '@/lib/api'
 import { PhotoEvidenceField } from '@/components/tasks/photo-evidence-field'
+import { Skeleton } from '@/components/ui/skeleton'
 import type { Assignment, OrderItemResponse } from '@/types'
 
 type DeliveryReconcilePanelProps = {
@@ -61,6 +63,14 @@ export function DeliveryReconcilePanel({ assignment, token, onReconciled }: Deli
       cancelled = true
     }
   }, [assignment.orderId, token, canReconcile])
+
+  useEffect(() => {
+    if (message) toast.success(message)
+  }, [message])
+
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
 
   if (!isPickup) return null
 
@@ -129,7 +139,11 @@ export function DeliveryReconcilePanel({ assignment, token, onReconciled }: Deli
       </p>
 
       {loading ? (
-        <p className="mt-4 text-sm text-gray-500">Loading order items…</p>
+        <div className="mt-4 space-y-2">
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+        </div>
       ) : rows.length === 0 ? (
         <p className="mt-4 text-sm text-gray-500">No items on this order.</p>
       ) : (
@@ -199,13 +213,6 @@ export function DeliveryReconcilePanel({ assignment, token, onReconciled }: Deli
             disabled={submitting}
           />
         </div>
-      ) : null}
-
-      {message ? (
-        <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">{message}</p>
-      ) : null}
-      {error ? (
-        <p className="mt-3 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p>
       ) : null}
 
       <button

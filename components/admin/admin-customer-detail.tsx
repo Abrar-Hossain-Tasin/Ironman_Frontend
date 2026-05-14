@@ -3,8 +3,10 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { AlertOctagon, ArrowLeft, ListChecks, MapPin, WalletCards } from 'lucide-react'
+import { toast } from 'sonner'
 import { RequireAuth } from '@/components/auth/require-auth'
 import { MetricCard } from '@/components/ui/metric-card'
+import { DashboardSkeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { apiFetch, ApiError } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
@@ -47,6 +49,10 @@ export function AdminCustomerDetail({ customerId }: Props) {
     }
   }, [token, customerId])
 
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
+
   return (
     <RequireAuth roles={['admin']}>
       <div className="mb-4">
@@ -60,9 +66,9 @@ export function AdminCustomerDetail({ customerId }: Props) {
       </div>
 
       {loading && !data ? (
-        <p className="text-sm text-gray-500">Loading customer 360…</p>
+        <DashboardSkeleton />
       ) : error ? (
-        <p className="rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p>
+        null
       ) : !data ? null : (
         <div className="space-y-6">
           <header className="rounded-lg border border-ironman-navy-100 bg-white p-5 shadow-soft">

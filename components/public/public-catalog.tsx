@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '@/components/ui/icon'
 import { PricingTable } from '@/components/ui/pricing-table'
+import { CardSkeleton, TableSkeleton } from '@/components/ui/skeleton'
 import { apiFetch, endpoints } from '@/lib/api'
 import { decorateCategories, decorateClothingTypes } from '@/lib/catalog'
 import { formatBdt } from '@/lib/utils'
@@ -44,7 +45,13 @@ export function PublicCatalog({ mode }: PublicCatalogProps) {
   const decoratedClothingTypes = useMemo(() => decorateClothingTypes(clothingTypes), [clothingTypes])
 
   if (loading) {
-    return <div className="rounded-lg border border-ironman-navy-100 bg-white p-5 text-sm font-semibold text-ironman-navy shadow-soft">Loading live pricing...</div>
+    return mode === 'home' ? (
+      <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        {Array.from({ length: 5 }).map((_, index) => <CardSkeleton key={index} />)}
+      </div>
+    ) : (
+      <TableSkeleton rows={6} />
+    )
   }
 
   if (error) {

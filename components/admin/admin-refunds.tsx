@@ -2,7 +2,9 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Loader2, WalletCards } from 'lucide-react'
+import { toast } from 'sonner'
 import { RequireAuth } from '@/components/auth/require-auth'
+import { TableSkeleton } from '@/components/ui/skeleton'
 import { apiFetch, ApiError } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
 import { formatBdt, statusLabel } from '@/lib/utils'
@@ -39,6 +41,8 @@ export function AdminRefunds() {
       ])
       setRefunds(refundsList)
       setOrders(ordersList)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load refunds')
     } finally {
       setLoading(false)
     }
@@ -48,6 +52,14 @@ export function AdminRefunds() {
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
+
+  useEffect(() => {
+    if (message) toast.success(message)
+  }, [message])
+
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
 
   const filtered = useMemo(
     () => (tab ? refunds.filter((refund) => refund.status === tab) : refunds),
@@ -128,13 +140,10 @@ export function AdminRefunds() {
                 </button>
               ))}
             </div>
-            {message ? (
-              <span className="rounded-md bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{message}</span>
-            ) : null}
           </div>
 
           {loading ? (
-            <p className="text-sm text-gray-500">Loading…</p>
+            <TableSkeleton rows={5} />
           ) : filtered.length === 0 ? (
             <p className="rounded-lg bg-white p-5 text-sm text-gray-600 shadow-soft">No refunds in this view.</p>
           ) : (
@@ -256,8 +265,6 @@ export function AdminRefunds() {
                 placeholder="bKash trx ID, etc."
               />
             </label>
-
-            {error ? <p className="mt-3 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p> : null}
 
             <button
               type="submit"

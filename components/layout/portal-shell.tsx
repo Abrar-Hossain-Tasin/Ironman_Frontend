@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { LogoutButton } from '@/components/auth/logout-button'
+import { LanguageToggle } from '@/components/language-toggle'
 import { Icon } from '@/components/ui/icon'
 import { NotificationBell } from '@/components/ui/notification-bell'
 import { cn } from '@/lib/utils'
@@ -56,6 +57,7 @@ export function PortalShell({ title, subtitle, nav, children }: PortalShellProps
               <h1 className="text-2xl font-bold text-ironman-navy">{title}</h1>
             </div>
             <div className="flex items-center gap-3">
+              <LanguageToggle compact />
               <NotificationBell />
               <LogoutButton />
             </div>

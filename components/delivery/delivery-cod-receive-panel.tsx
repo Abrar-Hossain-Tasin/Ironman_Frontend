@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { CheckCircle2, HandCoins, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { PanelSkeleton } from '@/components/ui/skeleton'
 import { apiFetch, ApiError } from '@/lib/api'
 import { getSupabaseClient } from '@/lib/supabase'
 import type { Assignment, CodPaymentStatusResponse, PaymentMethod } from '@/types'
@@ -76,14 +78,18 @@ export function DeliveryCodReceivePanel({ assignment, token, onConfirmed }: Deli
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignment.orderId, token, isDeliveryHandover])
 
+  useEffect(() => {
+    if (message) toast.success(message)
+  }, [message])
+
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
+
   if (!isDeliveryHandover) return null
 
   if (loading && !status) {
-    return (
-      <section className="rounded-lg border border-ironman-navy-100 bg-white p-5 shadow-soft">
-        <p className="text-sm text-gray-500">Loading payment handshake…</p>
-      </section>
-    )
+    return <PanelSkeleton rows={2} />
   }
 
   if (!status || !cashLikeMethods.includes(status.paymentMethod)) return null
@@ -134,9 +140,6 @@ export function DeliveryCodReceivePanel({ assignment, token, onConfirmed }: Deli
           subtitle={deliveryConfirmed ? 'Receipt recorded' : 'Tap once you have the cash in hand.'}
         />
       </div>
-
-      {message ? <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">{message}</p> : null}
-      {error ? <p className="mt-3 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p> : null}
 
       {!deliveryConfirmed ? (
         <button

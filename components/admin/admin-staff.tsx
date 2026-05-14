@@ -2,7 +2,9 @@
 
 import { FormEvent, useEffect, useState } from 'react'
 import { KeyRound, Pencil, Power, PowerOff, Star, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { RequireAuth } from '@/components/auth/require-auth'
+import { Skeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { apiFetch, ApiError } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
@@ -50,6 +52,14 @@ export function AdminStaff() {
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
+
+  useEffect(() => {
+    if (message) toast.success(message)
+  }, [message])
+
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
 
   useEffect(() => {
     if (!token || !selected) {
@@ -190,13 +200,6 @@ export function AdminStaff() {
 
   return (
     <RequireAuth roles={['admin']}>
-      {message ? (
-        <p className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">{message}</p>
-      ) : null}
-      {error ? (
-        <p className="mb-4 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p>
-      ) : null}
-
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
@@ -284,7 +287,10 @@ export function AdminStaff() {
               </header>
 
               {reviewLoading ? (
-                <p className="mt-3 text-sm text-gray-500">Loading reviews…</p>
+                <div className="mt-4 space-y-3">
+                  <Skeleton className="h-20 w-full" />
+                  <Skeleton className="h-20 w-full" />
+                </div>
               ) : reviews.length === 0 ? (
                 <p className="mt-3 text-sm text-gray-500">No reviews yet.</p>
               ) : (

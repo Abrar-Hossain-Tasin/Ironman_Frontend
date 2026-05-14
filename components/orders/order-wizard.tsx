@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import {
   ArrowLeft,
   ArrowRight,
@@ -101,9 +102,10 @@ function readCartDraft(): Partial<CartDraft> {
   }
 }
 
-export function OrderWizard() {
+export function OrderWizard({ reorderOrderId }: { reorderOrderId?: string }) {
   const router = useRouter()
   const token = useAuthStore((state) => state.accessToken)
+  const reorderAppliedRef = useRef(false)
   const draftRef = useRef<Partial<CartDraft>>({})
   if (typeof window !== 'undefined' && !Object.keys(draftRef.current).length) {
     draftRef.current = readCartDraft()
@@ -235,6 +237,49 @@ export function OrderWizard() {
 
     void load()
   }, [token])
+
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
+
+  useEffect(() => {
+    if (!token || !reorderOrderId || reorderAppliedRef.current || !pricing.length) return
+    let cancelled = false
+    async function applyReorder() {
+      try {
+        const source = await apiFetch<OrderResponse>(`/orders/${reorderOrderId}`, { token })
+        if (cancelled) return
+        const nextQuantities: QuantityMap = {}
+        const nextNotes: Record<string, string> = {}
+        source.items.forEach((item) => {
+          const priceCell = pricing.find((cell) =>
+            cell.clothingTypeId === item.clothingTypeId
+            && cell.serviceCategoryId === item.serviceCategoryId
+          )
+          if (!priceCell) return
+          nextQuantities[priceCell.id] = item.quantity
+          if (item.notes) nextNotes[item.clothingTypeId] = item.notes
+        })
+        setQuantities(nextQuantities)
+        setNotes(nextNotes)
+        setPickupAddressId(source.pickupAddress.id)
+        setDeliveryAddressId(source.deliveryAddress.id)
+        setSameAsPickup(source.pickupAddress.id === source.deliveryAddress.id)
+        setPaymentMethod(source.paymentMethod)
+        setSpecialInstructions(source.specialInstructions ?? '')
+        setAppliedCoupon(null)
+        setStep(3)
+        reorderAppliedRef.current = true
+        toast.success(`${source.orderNumber} copied. Review the schedule before placing again.`)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Could not copy order')
+      }
+    }
+    void applyReorder()
+    return () => {
+      cancelled = true
+    }
+  }, [pricing, reorderOrderId, token])
 
   // Curated coupons the customer can browse. One-shot at mount — cheap and
   // doesn't change inside a single ordering session.
@@ -614,8 +659,6 @@ export function OrderWizard() {
               </div>
             </div>
           </div>
-
-          {error ? <p className="mb-4 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p> : null}
 
           {step === 1 ? (
             <AddressStep

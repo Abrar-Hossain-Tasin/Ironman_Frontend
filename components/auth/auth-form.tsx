@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Mail, Lock, User, Phone, Eye, EyeOff } from 'lucide-react'
+import { toast } from 'sonner'
 import { apiFetch, ApiError } from '@/lib/api'
 import { roleHome, useAuthStore } from '@/lib/auth-store'
 import type { AuthResponse } from '@/types'
@@ -112,15 +113,21 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
 
     if (!isLogin) {
       if (!PHONE_PATTERN.test(phone.trim())) {
-        setError('Enter a valid Bangladesh phone number (e.g. 01XXXXXXXXX).')
+        const msg = 'Enter a valid Bangladesh phone number (e.g. 01XXXXXXXXX).'
+        setError(msg)
+        toast.error(msg)
         return
       }
       if (!isStrongPassword(password)) {
-        setError('Password must be at least 8 characters and include a letter and a digit.')
+        const msg = 'Password must be at least 8 characters and include a letter and a digit.'
+        setError(msg)
+        toast.error(msg)
         return
       }
       if (!acceptedTerms) {
-        setError('Please accept the Terms of Service and Privacy Policy to continue.')
+        const msg = 'Please accept the Terms of Service and Privacy Policy to continue.'
+        setError(msg)
+        toast.error(msg)
         return
       }
     }
@@ -146,17 +153,20 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
       if (mode === 'register' && address) {
         await apiFetch('/users/me/addresses', {
           method: 'POST',
-          token: auth.accessToken,
           body: { label: 'Home', addressLine1: address, area: 'Dhaka', city: 'Dhaka', defaultAddress: true }
         })
       }
       if (mode === 'register') {
+        toast.success('Account created. Check your email for the verification code.')
         router.push(`/verify-email?email=${encodeURIComponent(auth.user.email)}`)
       } else {
+        toast.success(`Welcome back, ${auth.user.fullName}.`)
         router.push(roleHome(auth.user.role))
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail || err.message : err instanceof Error ? err.message : 'Authentication failed')
+      const msg = err instanceof ApiError ? err.detail || err.message : err instanceof Error ? err.message : 'Authentication failed'
+      setError(msg)
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
@@ -262,12 +272,6 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
             .
           </span>
         </label>
-      )}
-
-      {error && (
-        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-lg bg-ironman-red-50 px-3 py-2 text-xs font-bold text-ironman-red">
-          {error}
-        </motion.p>
       )}
 
       <motion.button

@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { AlertOctagon, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { RequireAuth } from '@/components/auth/require-auth'
+import { TableSkeleton } from '@/components/ui/skeleton'
 import { apiFetch, ApiError } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
 import { statusLabel } from '@/lib/utils'
@@ -38,6 +40,8 @@ export function AdminIssues() {
         { token }
       )
       setIssues(list)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load issues')
     } finally {
       setLoading(false)
     }
@@ -47,6 +51,14 @@ export function AdminIssues() {
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, tab])
+
+  useEffect(() => {
+    if (message) toast.success(message)
+  }, [message])
+
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
 
   function openResolve(issue: IssueResponse) {
     setResolveOpen(issue)
@@ -97,13 +109,10 @@ export function AdminIssues() {
             </button>
           ))}
         </div>
-        {message ? (
-          <span className="rounded-md bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{message}</span>
-        ) : null}
       </div>
 
       {loading ? (
-        <p className="text-sm text-gray-500">Loading…</p>
+        <TableSkeleton rows={5} />
       ) : issues.length === 0 ? (
         <p className="rounded-lg bg-white p-5 text-sm text-gray-600 shadow-soft">No issues in this view.</p>
       ) : (
@@ -217,10 +226,6 @@ export function AdminIssues() {
                 This records the agreed amount on the issue. Process the actual refund on the Refunds page.
               </p>
             </label>
-
-            {error ? (
-              <p className="mt-3 rounded-lg bg-ironman-red-50 px-3 py-2 text-sm font-semibold text-ironman-red">{error}</p>
-            ) : null}
 
             <div className="mt-4 flex justify-end gap-2">
               <button

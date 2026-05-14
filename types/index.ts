@@ -34,8 +34,17 @@ export type AssignmentStatus = 'pending' | 'accepted' | 'in_progress' | 'complet
 export type AssignmentType = 'pickup' | 'delivery' | 'wash' | 'iron' | 'dry_clean'
 
 export type PaymentStatus = 'pending' | 'paid' | 'partial'
-export type PaymentType = 'cod_pickup' | 'cod_delivery' | 'bkash_merchant' | 'advance' | 'partial'
+export type PaymentType =
+  | 'cod_pickup'
+  | 'cod_delivery'
+  | 'bkash_merchant'
+  | 'nagad_merchant'
+  | 'rocket_merchant'
+  | 'card'
+  | 'advance'
+  | 'partial'
 export type PaymentMethod = 'cod' | 'online' | 'bkash' | 'nagad' | 'rocket' | 'card'
+export type PaymentWebhookStatus = 'received' | 'processed' | 'duplicate' | 'retry_scheduled' | 'failed'
 
 export type CodConfirmationStatus = 'pending' | 'customer_confirmed' | 'delivery_confirmed'
 
@@ -57,10 +66,9 @@ export type UserSummary = {
 }
 
 export type AuthResponse = {
-  accessToken: string
-  refreshToken: string
-  tokenType: 'Bearer'
+  tokenType?: 'Cookie'
   user: UserSummary
+  csrfToken?: string | null
 }
 
 // ── Addresses & catalog ──────────────────────────────────────────────────
@@ -257,6 +265,69 @@ export type PaymentLedgerRow = {
   notes?: string | null
   verifiedBy?: string | null
   verifiedAt?: string | null
+  appliedToBalance: boolean
+}
+
+export type PaymentWebhookEventRow = {
+  id: string
+  provider: string
+  eventId?: string | null
+  idempotencyKey: string
+  payloadSha256: string
+  status: PaymentWebhookStatus
+  orderId?: string | null
+  orderNumber?: string | null
+  paymentId?: string | null
+  attemptCount: number
+  lastError?: string | null
+  nextRetryAt?: string | null
+  processedAt?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type PaymentAuditEventRow = {
+  id: string
+  paymentId?: string | null
+  orderId: string
+  orderNumber: string
+  actorId?: string | null
+  actorName?: string | null
+  actorType: string
+  action: string
+  previousPaymentStatus?: PaymentStatus | null
+  newPaymentStatus?: PaymentStatus | null
+  previousPaidAmount?: number | null
+  newPaidAmount?: number | null
+  notes?: string | null
+  metadata?: string | null
+  createdAt: string
+}
+
+export type PaymentProviderSummary = {
+  provider: string
+  total: number
+  verifiedTotal: number
+  paymentCount: number
+  unverifiedCount: number
+  unappliedCount: number
+}
+
+export type PaymentReconciliationResponse = {
+  generatedAt: string
+  ledgerTotal: number
+  verifiedTotal: number
+  unverifiedTotal: number
+  unappliedTotal: number
+  paymentCount: number
+  unverifiedCount: number
+  unappliedCount: number
+  processedWebhookCount: number
+  retryScheduledWebhookCount: number
+  failedWebhookCount: number
+  providerSummaries: PaymentProviderSummary[]
+  recentWebhookEvents: PaymentWebhookEventRow[]
+  recentAuditEvents: PaymentAuditEventRow[]
 }
 
 export type CodPaymentStatusResponse = {

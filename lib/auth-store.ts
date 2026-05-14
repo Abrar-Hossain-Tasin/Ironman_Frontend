@@ -2,8 +2,10 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { configureAuthRefresh } from '@/lib/api'
+import { apiFetch, clearCsrfToken, configureAuthRefresh, setCsrfToken } from '@/lib/api'
 import type { AuthResponse, UserSummary } from '@/types'
+
+const COOKIE_SESSION_TOKEN = 'cookie-session'
 
 type AuthState = {
   accessToken: string | null
@@ -11,8 +13,27 @@ type AuthState = {
   user: UserSummary | null
   hasHydrated: boolean
   setAuth: (auth: AuthResponse) => void
+  setUser: (user: UserSummary) => void
   clearAuth: () => void
+  bootstrapSession: () => Promise<void>
   setHasHydrated: (value: boolean) => void
+}
+
+function writeSessionMarker(active: boolean) {
+  if (typeof document === 'undefined') return
+  document.cookie = active
+    ? 'ironman_session=1; path=/; max-age=1209600; SameSite=Lax'
+    : 'ironman_session=; path=/; max-age=0; SameSite=Lax'
+}
+
+function setSessionUser(set: (state: Partial<AuthState>) => void, user: UserSummary) {
+  writeSessionMarker(true)
+  set({
+    accessToken: COOKIE_SESSION_TOKEN,
+    refreshToken: null,
+    user,
+    hasHydrated: true
+  })
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -22,28 +43,51 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       user: null,
       hasHydrated: false,
-      setAuth: (auth) =>
-        set({
-          accessToken: auth.accessToken,
-          refreshToken: auth.refreshToken,
-          user: auth.user
-        }),
-      clearAuth: () => set({ accessToken: null, refreshToken: null, user: null }),
+      setAuth: (auth) => {
+        setCsrfToken(auth.csrfToken)
+        setSessionUser(set, auth.user)
+      },
+      setUser: (user) => setSessionUser(set, user),
+      clearAuth: () => {
+        clearCsrfToken()
+        writeSessionMarker(false)
+        set({ accessToken: null, refreshToken: null, user: null, hasHydrated: true })
+      },
+      bootstrapSession: async () => {
+        try {
+          const user = await apiFetch<UserSummary>('/users/me')
+          setSessionUser(set, user)
+        } catch {
+          clearCsrfToken()
+          writeSessionMarker(false)
+          set({ accessToken: null, refreshToken: null, user: null, hasHydrated: true })
+        }
+      },
       setHasHydrated: (value) => set({ hasHydrated: value })
     }),
     {
       name: 'ironman-auth',
+      partialize: (state) => ({ user: state.user }),
+      merge: (persisted, current) => ({
+        ...current,
+        user: persisted && typeof persisted === 'object'
+          ? (persisted as Partial<AuthState>).user ?? null
+          : null
+      }),
       onRehydrateStorage: () => (state) => {
-        state?.setHasHydrated(true)
+        if (typeof window === 'undefined') {
+          state?.setHasHydrated(true)
+          return
+        }
+        window.queueMicrotask(() => {
+          void state?.bootstrapSession()
+        })
       }
     }
   )
 )
 
-// Wire the api layer to read/write tokens via the same store so a silent
-// refresh transparently updates every component that subscribes.
 configureAuthRefresh({
-  getRefreshToken: () => useAuthStore.getState().refreshToken,
   onRefreshed: (auth) => useAuthStore.getState().setAuth(auth),
   onAuthLost: () => {
     useAuthStore.getState().clearAuth()
